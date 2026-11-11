@@ -15,6 +15,8 @@ import time
 import datetime
 import re
 import urllib.parse
+import urllib.request
+import threading
 import io
 
 PORT = 3000
@@ -591,8 +593,9 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
                 "hasToken": True,
                 "phoneNumberId": "1048...9201",
                 "verifyToken": "GOYOH_HEALTH_CONNECT_VERIFY_TOKEN",
-                "webhookUrl": "https://admin.goyoh.in/api/webhook/whatsapp",
-                "source": "environment"
+                "webhookUrl": "https://smart-clinic-whatsapp-webhook.onrender.com/webhook",
+                "liveWebhookEndpoint": "https://smart-clinic-whatsapp-webhook.onrender.com/webhook",
+                "source": "render_24_7"
             })
 
         # API: Super Admin Metrics (100% dynamic - starts at 0 until clinics/queues are active)
@@ -1011,9 +1014,22 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
 
         # Meta Webhook Receiver (POST /api/webhook/whatsapp)
         if clean_path in ('/webhook/whatsapp', '/api/webhook/whatsapp'):
-            sys.stdout.write(f"[Meta Webhook] Received webhook event\n")
+            sys.stdout.write(f"[Meta Webhook] Received webhook event, forwarding to Render...\n")
             if hasattr(sys.stdout, 'flush'): sys.stdout.flush()
-            return self.send_json(200, {"status": "EVENT_RECEIVED"})
+            # Forward to 24/7 Render Webhook
+            def _forward():
+                try:
+                    req_fw = urllib.request.Request(
+                        'https://smart-clinic-whatsapp-webhook.onrender.com/webhook',
+                        data=json.dumps(data).encode('utf-8'),
+                        headers={'Content-Type': 'application/json'},
+                        method='POST'
+                    )
+                    urllib.request.urlopen(req_fw, timeout=5)
+                except Exception as ex:
+                    pass
+            threading.Thread(target=_forward, daemon=True).start()
+            return self.send_json(200, {"status": "EVENT_RECEIVED", "forwardedTo": "render"})
 
         # API: Automated WhatsApp Trigger
         if clean_path in ('/notifications/whatsapp', '/api/notifications/whatsapp'):

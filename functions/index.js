@@ -360,6 +360,15 @@ app.post(['/webhook/whatsapp', '/api/webhook/whatsapp'], async (req, res) => {
           }).catch(() => {});
         }
       }
+
+      // 24/7 Redundancy: Forward incoming event to live Render webhook service
+      try {
+        fetch('https://smart-clinic-whatsapp-webhook.onrender.com/webhook', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        }).catch(() => {});
+      } catch (forwardErr) {}
     } catch (e) {
       console.warn('[Meta Webhook Error]', e);
     }
@@ -573,7 +582,8 @@ app.get(['/whatsapp/config', '/api/whatsapp/config'], async (req, res) => {
       phoneNumberId: creds.phoneNumberId ? `${creds.phoneNumberId.slice(0, 4)}...${creds.phoneNumberId.slice(-4)}` : null,
       source: creds.source,
       verifyToken: creds.verifyToken,
-      webhookUrl: 'https://admin.goyoh.in/api/webhook/whatsapp'
+      webhookUrl: 'https://smart-clinic-whatsapp-webhook.onrender.com/webhook',
+      liveWebhookEndpoint: 'https://smart-clinic-whatsapp-webhook.onrender.com/webhook'
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
