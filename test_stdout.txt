@@ -1,0 +1,2 @@
+sys.stdout: <class 'NoneType'> - None
+Flush error: 'NoneType' object has no attribute 'flush'

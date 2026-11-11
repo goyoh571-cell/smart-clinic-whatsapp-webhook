@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Smart Clinic OS - Multi-Tenant SaaS Healthcare Platform</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            clinic: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0f766e',
+              850: '#0f3833',
+              900: '#134e4a',
+            }
+          },
+          animation: {
+            'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'bounce-gentle': 'bounce 2s infinite',
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Core Libraries (Fast Local Vendor Loading with Automatic CDN Fallback) -->
+  <script src="/vendor/react.production.min.js"></script>
+  <script>window.React || document.write('<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin><\/script>');</script>
+
+  <script src="/vendor/react-dom.production.min.js"></script>
+  <script>window.ReactDOM || document.write('<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin><\/script>');</script>
+
+  <!-- Real Scannable QR Code Generator Library -->
+  <script src="/vendor/qrcode.min.js"></script>
+  <script>window.QRCode || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin><\/script>');</script>
+
+  <!-- jsPDF Library for Instant Browser PDF Generation & Printing -->
+  <script src="/vendor/jspdf.umd.min.js"></script>
+  <script>window.jspdf || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin><\/script>');</script>
+
+  <!-- Firebase SDK (v10 Compat: App, Firestore, Storage) - 100% Serverless Architecture -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+  <script>
+    // Initialize Firebase client directly connecting to 'smart-clinic-app'
+    (function() {
+      try {
+        var firebaseConfig = {
+          apiKey: "AIzaSyD_0K24tUnG1OWh74HwJfjqQIZ6Q3_IOn0",
+          authDomain: "smart-clinic-app-cf39b.firebaseapp.com",
+          projectId: "smart-clinic-app-cf39b",
+          storageBucket: "smart-clinic-app-cf39b.firebasestorage.app",
+          messagingSenderId: "111535735393",
+          appId: "1:111535735393:web:87efa9d334494cd017a020",
+          measurementId: "G-02HPCJPC5F"
+        };
+        if (window.firebase) {
+          if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+          }
+          var firestoreDb = firebase.firestore();
+          window.doc = function(db, col, id) {
+            var targetDb = db || firestoreDb;
+            return targetDb.collection(col).doc(String(id));
+          };
+          window.deleteDoc = function(docRef) {
+            if (docRef && typeof docRef.delete === 'function') {
+              return docRef.delete();
+            }
+            return Promise.reject(new Error('Invalid document reference passed to deleteDoc'));
+          };
+          window.SmartClinicFirebase = {
+            app: firebase.app(),
+            auth: (firebase.auth ? firebase.auth() : null),
+            db: firestoreDb,
+            storage: firebase.storage(),
+            firebaseConfig: firebaseConfig,
+            isInitialized: true,
+            doc: window.doc,
+            deleteDoc: window.deleteDoc
+          };
+          console.log('[Firebase] Connected directly to project: smart-clinic-app (Firestore & Storage active)');
+        }
+      } catch (err) {
+        console.warn('[Firebase Initialization Warning]:', err);
+      }
+    })();
+  </script>
+
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .font-mono-numbers {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.05);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(14, 165, 233, 0.3);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(14, 165, 233, 0.5);
+    }
+    @keyframes reelSlideIn {
+      0% { opacity: 0; transform: translateY(-8px) scale(0.98); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .animate-reel-slide {
+      animation: reelSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased min-h-screen selection:bg-teal-500 selection:text-slate-950 overflow-x-hidden">
+  <div id="root">
+    <div id="goyoh-init-loader" style="min-height:100vh;background:#020617;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Plus Jakarta Sans',sans-serif;padding:24px;color:#f8fafc;text-align:center;">
+      <div style="width:52px;height:52px;border-radius:18px;background:linear-gradient(135deg,#06b6d4,#14b8a6,#10b981);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:24px;color:#020617;box-shadow:0 12px 30px rgba(20,184,166,0.35);margin-bottom:20px;">G</div>
+      <div style="width:36px;height:36px;border:3px solid #1e293b;border-top-color:#14b8a6;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+      <p style="margin-top:20px;font-size:14px;font-weight:800;letter-spacing:0.04em;color:#f1f5f9;">GOYOH HEALTH CONNECT</p>
+      <p style="margin-top:6px;font-size:12px;color:#64748b;font-weight:500;">Initializing Clinical Environment...</p>
+    </div>
+  </div>
+
+  <!-- Resilient Diagnostics & Silent Non-Fatal Error Interceptor -->
+  <script>
+    (function() {
+      window.addEventListener('error', function(event) {
+        // Suppress browser extension or cross-origin redacted script errors
+        if (!event || !event.message || event.message === 'Script error.') {
+          return;
+        }
+        console.error('[SmartClinic Error]', event.message, event.filename, event.lineno);
+// Serverless client runtime
+      });
+    })();
+  </script>
+
+  <!-- Precompiled Fast Native Clinical Engine (Loads in <50ms, Zero Runtime Babel Transpilation) -->
+  <script src="/app.bundle.js?v=20261110_v1_whatsapp_automation"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+==================================================
+GOYOH Health Connect Multi-Tenant Server (Multi-Threaded)
+Running at: http://localhost:3000
+Clinic Portal Login: http://localhost:3000/login
+Super Admin Login: http://localhost:3000/super-admin/login
+Super Admin Dashboard: http://localhost:3000/super-admin
+Doctor Console: http://localhost:3000/dashboard
+Patient QR Route: http://localhost:3000/q/[clinic_slug]
+==================================================

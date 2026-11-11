@@ -1,0 +1,112 @@
+// ============================================================================
+// SMART CLINIC OS - MULTI-TENANT PRISMA SCHEMA
+// Supports 1,000+ individual doctor accounts with strictly isolated queues
+// ============================================================================
+
+datasource db {
+  provider = "postgresql" // or "mysql" / "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum TokenStatus {
+  WAITING
+  IN_CONSULTATION
+  COMPLETED
+  CANCELLED
+  SKIPPED
+}
+
+model Clinic {
+  id               Int            @id @default(autoincrement())
+  clinicId         String?        @unique // e.g. "CLN-MEDICLINC" or "CLN-84920"
+  slug             String         @unique // Permanent URL slug: e.g. "dr-arvind-indiranagar"
+  name             String
+  ownerName        String?        // Owner / Primary Doctor
+  email            String?        // Contact / Admin Email
+  address          String?
+  phone            String?
+  subscriptionPlan String         @default("Professional") // "Free Trial" | "Starter" | "Professional" | "Enterprise"
+  doctorSeats      Int            @default(3)
+  status           String         @default("ACTIVE") // "ACTIVE" | "SUSPENDED"
+  doctors          Doctor[]
+  tokens           Token[]
+  prescriptions    Prescription[]
+  patients         Patient[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([slug])
+  @@index([clinicId])
+}
+
+model Doctor {
+  id                  Int       @id @default(autoincrement())
+  email               String    @unique
+  passwordHash        String
+  doctorName          String
+  specialization      String
+  roomNumber          String    // e.g. "Consultation Room 1"
+  clinicId            Int
+  clinic              Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  avgConsultationTime Float     @default(8.0)
+  tokens              Token[]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([clinicId])
+}
+
+model Patient {
+  id            Int            @id @default(autoincrement())
+  name          String
+  phone         String
+  age           Int?
+  gender        String?
+  clinicId      Int
+  clinic        Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  tokens        Token[]
+  prescriptions Prescription[]
+  createdAt     DateTime       @default(now())
+
+  @@unique([phone, clinicId]) // Scoped per tenant clinic
+  @@index([clinicId, phone])
+}
+
+model Token {
+  id                    Int          @id @default(autoincrement())
+  tokenNumber           String       // e.g. "A-01"
+  status                TokenStatus  @default(WAITING)
+  complaint             String?
+  consultationStartTime DateTime?
+  consultationEndTime   DateTime?
+  clinicId              Int
+  clinic                Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctorId              Int?
+  doctor                Doctor?      @relation(fields: [doctorId], references: [id])
+  patientId             Int
+  patient               Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  prescription          Prescription?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  @@index([clinicId, status, createdAt])
+}
+
+model Prescription {
+  id           Int      @id @default(autoincrement())
+  tokenId      Int      @unique
+  token        Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  patientId    Int
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinicId     Int
+  clinic       Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  templateName String   @default("Custom Notes")
+  medicines    String   @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([clinicId])
+}

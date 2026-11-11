@@ -1,0 +1,32 @@
+{
+  "clinics": [
+    {
+      "id": 1,
+      "clinicId": "CLN-ANKITHA",
+      "name": "Dr. Ankitha Clinic",
+      "ownerName": "Dr. Ankitha Rao",
+      "email": "ankitha@clinic.com",
+      "username": "ankitha",
+      "password": "password123",
+      "slug": "ankitha-clinic",
+      "doctorSeats": 2,
+      "subscriptionPlan": "Professional",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-31T09:00:00"
+    }
+  ],
+  "doctors": [
+    {
+      "id": "doc-1",
+      "doctorName": "Dr. Ankitha Rao",
+      "specialty": "General Physician & Diabetologist",
+      "qualification": "MBBS, MD (General Medicine)",
+      "clinicId": "CLN-ANKITHA",
+      "clinicSlug": "ankitha-clinic",
+      "clinicName": "Dr. Ankitha Clinic",
+      "roomNumber": "Consultation Room 1",
+      "avgConsultationTime": 8.0,
+      "status": "ACTIVE"
+    }
+  ]
+}
