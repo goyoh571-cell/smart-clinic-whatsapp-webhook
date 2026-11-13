@@ -727,15 +727,25 @@ export default function App() {
     const waMessage = `Hello ${name.trim()}, your Token number is ${tokenNumber} at ${profile.clinicName}. Estimated wait time: ~${estimatedWaitMinutes} mins (${waitingCount} patients ahead of you).`;
     dispatchWhatsAppMessage(phone, waMessage, 'REGISTER');
 
-    if (isConnected) {
-      try {
-        fetch(`${serverUrl}/api/tokens/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clinicId, patientName: name, patientPhone: phone, complaint }),
-        }).catch(() => {});
-      } catch (e) {}
-    }
+    // Dispatch directly to full 24/7 Render Webhook URL
+    const RENDER_BACKEND_URL = 'https://smart-clinic-whatsapp-webhook.onrender.com';
+    try {
+      fetch(`${RENDER_BACKEND_URL}/api/send-token-alert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clinicId,
+          clinicSlug: profile.clinicSlug || 'apollo-clinic',
+          name,
+          phone,
+          tokenNumber,
+          estWaitTime: `~${estimatedWaitMinutes} mins`,
+          clinicName: profile.clinicName,
+          doctorName: profile.doctorName,
+          roomNumber: profile.roomNumber
+        }),
+      }).catch(() => {});
+    } catch (e) {}
 
     return newToken;
   };

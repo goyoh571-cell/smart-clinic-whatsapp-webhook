@@ -2623,7 +2623,11 @@
           ]
         };
 
-        const RENDER_ENDPOINT = 'https://smart-clinic-whatsapp-webhook.onrender.com/api/send-token-alert';
+        // 1. Dispatch POST request directly to the full Render backend endpoint (24/7 Webhook)
+        const RENDER_BACKEND_URL = 'https://smart-clinic-whatsapp-webhook.onrender.com';
+        const RENDER_ENDPOINT = `${RENDER_BACKEND_URL}/api/send-token-alert`;
+
+        // A. Primary dispatch to full Render URL: /api/send-token-alert
         fetch(RENDER_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2634,19 +2638,23 @@
           console.warn('[Render /api/send-token-alert] Notice:', err);
         });
 
-        // Also ping relative endpoint on current server
-        fetch(`${serverUrl}/api/send-token-alert`, {
+        // B. Dual-dispatch directly to full Render URL: /api/notifications/queue-checkin
+        fetch(`${RENDER_BACKEND_URL}/api/notifications/queue-checkin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(tokenAlertPayload)
+        }).then(r => r.json()).then(res => {
+          console.log('[Render /api/notifications/queue-checkin] Dispatched:', res);
         }).catch(() => {});
 
-        // Ping legacy queue-checkin route for universal backwards compatibility
-        fetch(`${serverUrl}/api/notifications/queue-checkin`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(tokenAlertPayload)
-        }).catch(() => {});
+        // C. Also ping local server if running locally on localhost
+        if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+          fetch(`${serverUrl}/api/send-token-alert`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(tokenAlertPayload)
+          }).catch(() => {});
+        }
 
         // 2. Write patient check-in directly to Cloud Firestore (Serverless)
         addPatientToFirestore(newToken, targetSlug);
@@ -2798,31 +2806,26 @@
           tokenId
         };
 
-        // Instant API dispatch to Cloud Function (<10s SLA)
-        fetch(`${serverUrl}/api/notifications/prescription-dispatch`, {
+        // Instant API dispatch to Render backend (<10s SLA)
+        const RENDER_BACKEND_URL = 'https://smart-clinic-whatsapp-webhook.onrender.com';
+        fetch(`${RENDER_BACKEND_URL}/api/notifications/prescription-dispatch`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(prescriptionDispatchPayload)
         }).then(r => r.json()).then(res => {
-          console.log('[Prescription Dispatch] Completed via Cloud Functions in:', res.elapsedMs, 'ms. SLA <10s met:', res.elapsedMs < 10000);
+          console.log('[Prescription Dispatch] Completed via Render in:', res.elapsedMs, 'ms. SLA <10s met:', res.elapsedMs < 10000);
         }).catch(err => {
-          console.warn('[Prescription Dispatch] Cloud Function fallback:', err);
+          console.warn('[Prescription Dispatch] Render fallback:', err);
         });
 
-        // Also ping legacy notification route for backwards compatibility
-        fetch(`${serverUrl}/api/notifications/whatsapp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            phone: activeToken.patient?.phone,
-            patientName: activeToken.patient?.name,
-            tokenNumber: activeToken.tokenNumber,
-            clinicName: activeDoctor.clinicName,
-            doctorName: activeDoctor.doctorName,
-            rxText: rxNotes,
-            pdfUrl
-          })
-        }).catch(() => {});
+        // Also ping local server if on localhost
+        if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+          fetch(`${serverUrl}/api/notifications/prescription-dispatch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(prescriptionDispatchPayload)
+          }).catch(() => {});
+        }
 
         setLastCompletedRx({
           patientName: activeToken.patient?.name,
@@ -2842,16 +2845,19 @@
           const nextWaMessage = `Token ${nextPatient.tokenNumber}: ${activeDoctor.doctorName} is ready for you now. Please step inside ${activeDoctor.roomNumber}.`;
           dispatchWhatsAppMessage(nextPatient.patient?.phone, nextWaMessage, 'CALL_NEXT');
 
-          fetch(`${serverUrl}/api/notifications/whatsapp`, {
+          const RENDER_BACKEND_URL = 'https://smart-clinic-whatsapp-webhook.onrender.com';
+          fetch(`${RENDER_BACKEND_URL}/api/notifications/queue-checkin`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              clinicSlug: activeDoctor.clinicSlug,
               phone: nextPatient.patient?.phone,
               patientName: nextPatient.patient?.name,
               tokenNumber: nextPatient.tokenNumber,
               clinicName: activeDoctor.clinicName,
               doctorName: activeDoctor.doctorName,
-              roomNumber: activeDoctor.roomNumber
+              roomNumber: activeDoctor.roomNumber,
+              callNext: true
             })
           }).catch(() => {});
         }
