@@ -1057,7 +1057,10 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
                     pass
             threading.Thread(target=_fwd_render, daemon=True).start()
 
-            sys.stdout.write(f"[Token Alert] DISPATCH SUCCESS -> Clinic: {c_slug} | Patient: {p_name} | To: {clean_digits} | Token: {t_num}\n")
+            t_name = data.get('templateName', 'patient_token_alert')
+            params = data.get('parameters', [p_name, t_num, c_name, wait_time.lstrip('~'), d_name])
+
+            sys.stdout.write(f"[Token Alert] DISPATCH SUCCESS -> Clinic: {c_slug} | Patient: {p_name} | To: {clean_digits} | Token: {t_num} | Template: {t_name}\n")
             if hasattr(sys.stdout, 'flush'): sys.stdout.flush()
 
             return self.send_json(200, {
@@ -1070,9 +1073,11 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
                 "name": p_name,
                 "phone": clean_digits,
                 "tokenNumber": t_num,
+                "templateName": t_name,
+                "parameters": params,
                 "estWaitTime": wait_time,
                 "directLink": direct_link,
-                "message": "Token alert WhatsApp dispatched successfully"
+                "message": f"Token alert WhatsApp template [{t_name}] dispatched successfully"
             })
 
         # Meta Webhook Receiver (POST /api/webhook/whatsapp)

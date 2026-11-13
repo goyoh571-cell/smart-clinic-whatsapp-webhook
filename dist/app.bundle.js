@@ -2518,7 +2518,10 @@ function App() {
       clinicName: targetDoc.clinicName,
       doctorName: targetDoc.doctorName,
       roomNumber: targetDoc.roomNumber,
-      trackerUrl
+      trackerUrl,
+      templateName: 'patient_token_alert',
+      languageCode: 'en_US',
+      parameters: [cleanName, tokenNumber, targetDoc.clinicName, `~${estimatedWaitMinutes} mins`, targetDoc.doctorName]
     };
     const RENDER_ENDPOINT = 'https://smart-clinic-whatsapp-webhook.onrender.com/api/send-token-alert';
     fetch(RENDER_ENDPOINT, {

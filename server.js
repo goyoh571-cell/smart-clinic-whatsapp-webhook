@@ -37,10 +37,13 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOK
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || 'AIzaSyD_0K24tUnG1OWh74HwJfjqQIZ6Q3_IOn0';
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'smart-clinic-app-cf39b';
 
-// Helper: Normalize phone number to digits only (e.g., +1 (555) 145-6531 -> 15551456531)
+// Helper: Normalize phone number to clean E.164 digits without '+' (e.g., +1 (555) 145-6531 -> 15551456531)
 function formatPhone(num) {
   if (!num) return WHATSAPP_TEST_NUMBER.replace(/[^0-9]/g, '');
-  const digits = String(num).replace(/[^0-9]/g, '');
+  let digits = String(num).replace(/[^0-9]/g, '');
+  if (digits.startsWith('0') && digits.length === 11) {
+    digits = digits.slice(1);
+  }
   if (digits.length === 10) return `91${digits}`; // default India 10-digit
   return digits;
 }
@@ -48,36 +51,88 @@ function formatPhone(num) {
 // ----------------------------------------------------------------------------
 // OUTBOUND META WHATSAPP DISPATCH HELPER
 // ----------------------------------------------------------------------------
-async function sendMetaWhatsAppMessage({ to, messageText, mediaUrl, filename }) {
+async function sendMetaWhatsAppMessage({
+  to,
+  messageText,
+  mediaUrl,
+  filename,
+  templateName,
+  languageCode = 'en_US',
+  parameters = [],
+  components = null
+}) {
   const cleanTo = formatPhone(to);
   const directLink = `https://api.whatsapp.com/send?phone=${cleanTo}&text=${encodeURIComponent(
-    messageText + (mediaUrl ? `\n\n📄 Prescription PDF: ${mediaUrl}` : '')
+    (messageText || 'Token confirmation alert') + (mediaUrl ? `\n\n📄 Prescription PDF: ${mediaUrl}` : '')
   )}`;
 
   const metaUrl = `https://graph.facebook.com/v19.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
-  // Payload: document or text
-  const payload = mediaUrl
-    ? {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanTo,
-        type: 'document',
-        document: {
-          link: mediaUrl,
-          caption: messageText.slice(0, 1024),
-          filename: filename || 'Prescription.pdf'
-        }
+  // Payload: template, document, or text
+  let payload;
+  let isTemplateMode = Boolean(templateName);
+
+  if (isTemplateMode) {
+    const templatePayload = {
+      name: templateName,
+      language: {
+        code: languageCode || 'en_US'
       }
-    : {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanTo,
-        type: 'text',
-        text: { preview_url: false, body: messageText }
-      };
+    };
+
+    // hello_world template in Meta test environments cannot have components/parameters
+    if (templateName !== 'hello_world') {
+      if (Array.isArray(components) && components.length > 0) {
+        templatePayload.components = components;
+      } else if (Array.isArray(parameters) && parameters.length > 0) {
+        templatePayload.components = [
+          {
+            type: 'body',
+            parameters: parameters.map(p => {
+              if (typeof p === 'object' && p !== null && p.type) return p;
+              return { type: 'text', text: String(p ?? '') };
+            })
+          }
+        ];
+      }
+    }
+
+    payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: cleanTo,
+      type: 'template',
+      template: templatePayload
+    };
+  } else if (mediaUrl) {
+    payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: cleanTo,
+      type: 'document',
+      document: {
+        link: mediaUrl,
+        caption: (messageText || '').slice(0, 1024),
+        filename: filename || 'Prescription.pdf'
+      }
+    };
+  } else {
+    // Plain text mode (only succeeds within active 24-hr customer service window)
+    payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: cleanTo,
+      type: 'text',
+      text: { preview_url: false, body: messageText || 'Token confirmation alert' }
+    };
+  }
 
   try {
+    console.log(`[Meta Outbound Request] Dispatching ${payload.type} to ${cleanTo} via Phone ID ${WHATSAPP_PHONE_NUMBER_ID}...`);
+    if (payload.type === 'template') {
+      console.log(`[Meta Template Payload] Template: "${payload.template.name}" | Lang: "${payload.template.language.code}" | Body Params:`, JSON.stringify(payload.template.components?.[0]?.parameters || []));
+    }
+
     const response = await fetch(metaUrl, {
       method: 'POST',
       headers: {
@@ -87,39 +142,91 @@ async function sendMetaWhatsAppMessage({ to, messageText, mediaUrl, filename }) 
       body: JSON.stringify(payload)
     });
 
-    const resJson = await response.json();
-    const isSuccess = response.ok && (resJson.messages?.length > 0 || !resJson.error);
+    const resJson = await response.json().catch(() => ({}));
+    const isSuccess = response.ok && Array.isArray(resJson.messages) && resJson.messages.length > 0;
 
     if (isSuccess) {
-      const msgId = resJson.messages?.[0]?.id || `wamid_${Date.now()}`;
-      console.log(`✓ [Meta Outbound SUCCESS] Sent to: ${cleanTo} | Message ID: ${msgId}`);
+      const msgId = resJson.messages[0]?.id || `wamid_${Date.now()}`;
+      console.log(`✓ [Meta Outbound SUCCESS] Sent to: ${cleanTo} | Template: ${templateName || 'none'} | Message ID: ${msgId}`);
       return {
         success: true,
         delivered: true,
         mode: 'meta_cloud_api',
         messageId: msgId,
+        templateName: templateName || null,
         recipient: cleanTo,
         directLink,
         raw: resJson
       };
     } else {
-      console.warn(`⚠️ [Meta Outbound Notice] ${resJson.error?.message || response.statusText}. Fallback link prepared.`);
+      console.error(`❌ [Meta Outbound REJECTED] Status ${response.status}:`, JSON.stringify(resJson.error || resJson));
+
+      // If a custom template failed with error 132000 (template does not exist) and templateName is not hello_world,
+      // attempt fallback to pre-approved 'hello_world' in test accounts
+      if (isTemplateMode && templateName !== 'hello_world' && (resJson.error?.code === 132000 || resJson.error?.error_subcode === 2494011)) {
+        console.warn(`[Meta Template Fallback] Custom template '${templateName}' not found or unapproved in Meta. Attempting 'hello_world' fallback for sandbox verification...`);
+        try {
+          const fallbackPayload = {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanTo,
+            type: 'template',
+            template: {
+              name: 'hello_world',
+              language: { code: 'en_US' }
+            }
+          };
+          const fbResp = await fetch(metaUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(fallbackPayload)
+          });
+          const fbJson = await fbResp.json().catch(() => ({}));
+          if (fbResp.ok && Array.isArray(fbJson.messages) && fbJson.messages.length > 0) {
+            const fbMsgId = fbJson.messages[0].id;
+            console.log(`✓ [Meta Outbound SUCCESS via hello_world Fallback] Sent to: ${cleanTo} | Message ID: ${fbMsgId}`);
+            return {
+              success: true,
+              delivered: true,
+              mode: 'meta_template_fallback_hello_world',
+              messageId: fbMsgId,
+              templateName: 'hello_world',
+              recipient: cleanTo,
+              directLink,
+              raw: fbJson
+            };
+          }
+        } catch (fbErr) {
+          console.warn('[Meta hello_world fallback failed]:', fbErr.message);
+        }
+      }
+
       return {
-        success: true,
+        success: false,
         delivered: false,
-        mode: 'direct_link_fallback',
+        mode: 'meta_error',
         recipient: cleanTo,
+        templateName: templateName || null,
         directLink,
-        error: resJson.error || response.statusText
+        error: resJson.error?.message || response.statusText || 'Meta Graph API call failed',
+        errorCode: resJson.error?.code,
+        errorSubcode: resJson.error?.error_subcode,
+        errorDetails: resJson.error?.error_data?.details,
+        fbtrace_id: resJson.error?.fbtrace_id,
+        metaError: resJson.error
       };
     }
   } catch (netErr) {
-    console.warn(`[Meta Network Error]:`, netErr.message);
+    console.error(`[Meta Network Error]:`, netErr.message);
     return {
-      success: true,
+      success: false,
       delivered: false,
-      mode: 'direct_link_fallback',
+      mode: 'network_error',
       recipient: cleanTo,
+      templateName: templateName || null,
       directLink,
       error: netErr.message
     };
@@ -128,32 +235,27 @@ async function sendMetaWhatsAppMessage({ to, messageText, mediaUrl, filename }) 
 
 // Helper: Save incoming/outgoing event to Firestore with automatic REST fallback
 async function saveToFirestore(collection, data) {
-  if (admin && admin.apps.length > 0) {
-    try {
-      await admin.firestore().collection(collection).add({
-        ...data,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      return true;
-    } catch (adminErr) {}
-  }
-
   try {
     const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${collection}?key=${FIREBASE_API_KEY}`;
     const fields = {};
     for (const [k, v] of Object.entries(data)) {
+      if (v === undefined || v === null) continue;
       if (typeof v === 'string') fields[k] = { stringValue: v };
       else if (typeof v === 'number') fields[k] = { integerValue: String(v) };
       else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
-      else if (v && typeof v === 'object') fields[k] = { stringValue: JSON.stringify(v) };
+      else if (typeof v === 'object') fields[k] = { stringValue: JSON.stringify(v) };
     }
     fields.receivedAt = { timestampValue: new Date().toISOString() };
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
     const resp = await fetch(firestoreUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields })
+      body: JSON.stringify({ fields }),
+      signal: controller.signal
     });
+    clearTimeout(timer);
     return resp.ok;
   } catch (restErr) {
     return false;
@@ -306,7 +408,7 @@ app.all(['/api/test/send-whatsapp', '/test/send'], async (req, res) => {
 // ----------------------------------------------------------------------------
 // 5. OFFICIAL TOKEN ALERT API (/api/send-token-alert & /send-token-alert)
 // Triggered dynamically across all checkin pages: admin.goyoh.in/checkin/[clinic-slug]
-// Receives: { clinicSlug, name, phone, tokenNumber, estWaitTime }
+// Receives: { clinicSlug, name, phone, tokenNumber, estWaitTime, templateName, parameters }
 // Dispatches personalized token notification template directly to patient's mobile
 // ----------------------------------------------------------------------------
 app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
@@ -322,7 +424,14 @@ app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
       doctorName,
       roomNumber,
       waitingCount,
-      trackerUrl
+      trackerUrl,
+      templateName,
+      template,
+      languageCode,
+      language,
+      parameters,
+      templateParams,
+      components
     } = req.body;
 
     const patientName = String(name || req.body.patientName || 'Patient').trim();
@@ -342,8 +451,8 @@ app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
     const cleanTokenNum = token.replace(/[^0-9]/g, '') || '1';
     const queueLink = trackerUrl || `https://admin.goyoh.in/queue/${slug}?token=${cleanTokenNum}`;
 
-    // Personalized WhatsApp Token Notification Message Template
-    const templateMessage = 
+    // Personalized WhatsApp Message Text (used for directLink and fallback)
+    const fallbackMessageText = 
 `🏥 *${readableClinic} • GOYOH Health Connect*
 
 Namaste *${patientName}*! Your digital queue token is confirmed:
@@ -358,12 +467,37 @@ ${queueLink}
 
 _Please arrive near your consultation room when your token is called._`;
 
-    console.log(`[Token Alert API] Dispatching token ${token} to ${patientName} (${cleanRecipient}) for clinic: ${slug}...`);
+    // Determine WhatsApp Template Name and Language
+    const effectiveTemplateName = (templateName || template || process.env.WHATSAPP_TEMPLATE_NAME || 'patient_token_alert').trim();
+    const effectiveLanguageCode = (languageCode || language || process.env.WHATSAPP_TEMPLATE_LANG || 'en_US').trim();
 
-    // Dispatch directly via Meta WhatsApp Cloud API
+    // Determine Template Body Parameters:
+    // {{1}} Patient Name
+    // {{2}} Token Number
+    // {{3}} Clinic Name
+    // {{4}} Estimated Wait Time
+    // {{5}} Doctor Name
+    let effectiveParams = parameters || templateParams;
+    if (!effectiveParams && effectiveTemplateName !== 'hello_world') {
+      effectiveParams = [
+        patientName,
+        token,
+        readableClinic,
+        waitTime.replace(/^~+/, ''),
+        docName
+      ];
+    }
+
+    console.log(`[Token Alert API] Dispatching token ${token} to ${patientName} (${cleanRecipient}) via template: "${effectiveTemplateName}" (lang: ${effectiveLanguageCode})...`);
+
+    // Dispatch directly via Meta WhatsApp Cloud API with template & parameters
     const result = await sendMetaWhatsAppMessage({
       to: cleanRecipient,
-      messageText: templateMessage
+      messageText: fallbackMessageText,
+      templateName: effectiveTemplateName,
+      languageCode: effectiveLanguageCode,
+      parameters: effectiveTemplateName === 'hello_world' ? [] : effectiveParams,
+      components: components || null
     });
 
     const elapsedMs = Date.now() - startTime;
@@ -376,28 +510,53 @@ _Please arrive near your consultation room when your token is called._`;
       phone: cleanRecipient,
       tokenNumber: token,
       estWaitTime: waitTime,
+      templateName: result.templateName || effectiveTemplateName,
       delivered: result.delivered,
       mode: result.mode,
       messageId: result.messageId || null,
+      error: result.error || null,
       elapsedMs,
       timestamp: new Date().toISOString()
     });
 
-    return res.status(200).json({
-      success: true,
-      delivered: result.delivered,
-      mode: result.mode,
-      messageId: result.messageId || null,
-      recipient: cleanRecipient,
-      clinicSlug: slug,
-      name: patientName,
-      phone: cleanRecipient,
-      tokenNumber: token,
-      estWaitTime: waitTime,
-      directLink: result.directLink,
-      elapsedMs,
-      message: `Token alert dispatched to ${cleanRecipient} via Meta WhatsApp Cloud API in ${(elapsedMs / 1000).toFixed(2)}s`
-    });
+    if (result.delivered) {
+      return res.status(200).json({
+        success: true,
+        delivered: true,
+        mode: result.mode,
+        messageId: result.messageId,
+        recipient: cleanRecipient,
+        templateName: result.templateName || effectiveTemplateName,
+        parameters: effectiveParams,
+        clinicSlug: slug,
+        name: patientName,
+        tokenNumber: token,
+        estWaitTime: waitTime,
+        directLink: result.directLink,
+        elapsedMs,
+        message: `Token alert dispatched to ${cleanRecipient} via Meta WhatsApp Cloud API template [${result.templateName || effectiveTemplateName}] in ${(elapsedMs / 1000).toFixed(2)}s`
+      });
+    } else {
+      return res.status(200).json({
+        success: false,
+        delivered: false,
+        mode: result.mode,
+        recipient: cleanRecipient,
+        templateName: effectiveTemplateName,
+        parameters: effectiveParams,
+        clinicSlug: slug,
+        name: patientName,
+        tokenNumber: token,
+        error: result.error || 'Meta WhatsApp delivery unconfirmed',
+        errorCode: result.errorCode,
+        errorSubcode: result.errorSubcode,
+        errorDetails: result.errorDetails,
+        metaError: result.metaError,
+        directLink: result.directLink,
+        elapsedMs,
+        message: `Meta Cloud API delivery failed: ${result.error}. Pre-filled direct link available.`
+      });
+    }
   } catch (error) {
     console.error('[Token Alert Error]:', error);
     res.status(500).json({ error: error.message });

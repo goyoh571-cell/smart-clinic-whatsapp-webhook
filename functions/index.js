@@ -70,14 +70,25 @@ async function getWhatsAppCredentials(clinicSlug) {
 }
 
 // Core Meta WhatsApp Cloud API Dispatcher
-async function sendMetaWhatsAppMessage({ toPhone, messageText, mediaUrl, filename, clinicSlug, metadata = {} }) {
+async function sendMetaWhatsAppMessage({
+  toPhone,
+  messageText,
+  mediaUrl,
+  filename,
+  clinicSlug,
+  templateName,
+  languageCode = 'en_US',
+  parameters = [],
+  components = null,
+  metadata = {}
+}) {
   const cleanPhone = formatWhatsAppPhone(toPhone);
   if (!cleanPhone) {
     throw new Error('Valid recipient phone number is required');
   }
 
   const directLink = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(
-    messageText + (mediaUrl ? `\n\n📄 Prescription PDF: ${mediaUrl}` : '')
+    (messageText || 'Token confirmation alert') + (mediaUrl ? `\n\n📄 Prescription PDF: ${mediaUrl}` : '')
   )}`;
 
   const creds = await getWhatsAppCredentials(clinicSlug);
@@ -86,11 +97,11 @@ async function sendMetaWhatsAppMessage({ toPhone, messageText, mediaUrl, filenam
     console.log(`[WhatsApp Dispatcher] No Meta API credentials active for ${cleanPhone}. Returning click-to-chat direct link.`);
     const logRecord = {
       phone: cleanPhone,
-      type: mediaUrl ? 'PRESCRIPTION_PDF' : 'QUEUE_ALERT',
+      type: mediaUrl ? 'PRESCRIPTION_PDF' : (templateName ? 'TEMPLATE_ALERT' : 'QUEUE_ALERT'),
       provider: 'direct_link_fallback',
       status: 'PREPARED_DIRECT_LINK',
       directLink,
-      messageSnippet: messageText.slice(0, 150),
+      messageSnippet: (messageText || '').slice(0, 150),
       mediaUrl: mediaUrl || null,
       metadata,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -107,25 +118,57 @@ async function sendMetaWhatsAppMessage({ toPhone, messageText, mediaUrl, filenam
   }
 
   // Construct Meta Cloud API Payload
-  const payload = mediaUrl
-    ? {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanPhone,
-        type: 'document',
-        document: {
-          link: mediaUrl,
-          filename: filename || 'Prescription.pdf',
-          caption: messageText
-        }
+  let payload;
+  if (templateName) {
+    const templatePayload = {
+      name: templateName,
+      language: {
+        code: languageCode || 'en_US'
       }
-    : {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanPhone,
-        type: 'text',
-        text: { body: messageText, preview_url: true }
-      };
+    };
+    if (templateName !== 'hello_world') {
+      if (Array.isArray(components) && components.length > 0) {
+        templatePayload.components = components;
+      } else if (Array.isArray(parameters) && parameters.length > 0) {
+        templatePayload.components = [
+          {
+            type: 'body',
+            parameters: parameters.map(p => {
+              if (typeof p === 'object' && p !== null && p.type) return p;
+              return { type: 'text', text: String(p ?? '') };
+            })
+          }
+        ];
+      }
+    }
+    payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: cleanPhone,
+      type: 'template',
+      template: templatePayload
+    };
+  } else if (mediaUrl) {
+    payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: cleanPhone,
+      type: 'document',
+      document: {
+        link: mediaUrl,
+        filename: filename || 'Prescription.pdf',
+        caption: messageText
+      }
+    };
+  } else {
+    payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: cleanPhone,
+      type: 'text',
+      text: { body: messageText, preview_url: true }
+    };
+  }
 
   console.log(`[WhatsApp Cloud API] Dispatching ${payload.type} to ${cleanPhone} via phoneId ${creds.phoneNumberId}...`);
 
@@ -145,13 +188,13 @@ async function sendMetaWhatsAppMessage({ toPhone, messageText, mediaUrl, filenam
 
   const logRecord = {
     phone: cleanPhone,
-    type: mediaUrl ? 'PRESCRIPTION_PDF' : 'QUEUE_ALERT',
+    type: mediaUrl ? 'PRESCRIPTION_PDF' : (templateName ? 'TEMPLATE_ALERT' : 'QUEUE_ALERT'),
     provider: 'meta_cloud_api',
     status: isSuccess ? 'DISPATCHED_TO_META' : 'ERROR',
     messageId,
     apiResponse: resData,
     directLink,
-    messageSnippet: messageText.slice(0, 150),
+    messageSnippet: (messageText || '').slice(0, 150),
     mediaUrl: mediaUrl || null,
     metadata,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -163,7 +206,10 @@ async function sendMetaWhatsAppMessage({ toPhone, messageText, mediaUrl, filenam
     return {
       success: false,
       delivered: false,
-      error: resData,
+      error: resData.error?.message || 'Meta Graph API call failed',
+      errorCode: resData.error?.code,
+      errorSubcode: resData.error?.error_subcode,
+      metaError: resData.error,
       directLink,
       mode: 'meta_cloud_api_failed'
     };
@@ -381,7 +427,7 @@ app.post(['/webhook/whatsapp', '/api/webhook/whatsapp'], async (req, res) => {
 // ----------------------------------------------------------------------------
 // FEATURE 1: Official Token Alert API (/api/send-token-alert & /send-token-alert)
 // Triggered dynamically across all checkin pages: admin.goyoh.in/checkin/[clinic-slug]
-// Receives: { clinicSlug, name, phone, tokenNumber, estWaitTime }
+// Receives: { clinicSlug, name, phone, tokenNumber, estWaitTime, templateName, parameters }
 // ----------------------------------------------------------------------------
 app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
   const startTime = Date.now();
@@ -396,7 +442,14 @@ app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
       doctorName,
       roomNumber,
       waitingCount,
-      trackerUrl
+      trackerUrl,
+      templateName,
+      template,
+      languageCode,
+      language,
+      parameters,
+      templateParams,
+      components
     } = req.body;
 
     const patientName = String(name || req.body.patientName || 'Patient').trim();
@@ -431,6 +484,20 @@ ${queueLink}
 
 _Please arrive near your consultation room when your token is called._`;
 
+    const effectiveTemplateName = (templateName || template || process.env.WHATSAPP_TEMPLATE_NAME || 'patient_token_alert').trim();
+    const effectiveLanguageCode = (languageCode || language || process.env.WHATSAPP_TEMPLATE_LANG || 'en_US').trim();
+
+    let effectiveParams = parameters || templateParams;
+    if (!effectiveParams && effectiveTemplateName !== 'hello_world') {
+      effectiveParams = [
+        patientName,
+        token,
+        readableClinic,
+        waitTime.replace(/^~+/, ''),
+        docName
+      ];
+    }
+
     // Forward to Render 24/7 backend endpoint
     fetch('https://smart-clinic-whatsapp-webhook.onrender.com/api/send-token-alert', {
       method: 'POST',
@@ -442,12 +509,16 @@ _Please arrive near your consultation room when your token is called._`;
     const dispatchResult = await sendMetaWhatsAppMessage({
       toPhone: cleanRecipient,
       messageText: templateMessage,
-      clinicSlug: slug
+      clinicSlug: slug,
+      templateName: effectiveTemplateName,
+      languageCode: effectiveLanguageCode,
+      parameters: effectiveTemplateName === 'hello_world' ? [] : effectiveParams,
+      components: components || null
     });
 
     const elapsedMs = Date.now() - startTime;
     return res.status(200).json({
-      success: true,
+      success: dispatchResult.delivered,
       delivered: dispatchResult.delivered,
       mode: dispatchResult.mode,
       messageId: dispatchResult.messageId || null,
@@ -457,9 +528,14 @@ _Please arrive near your consultation room when your token is called._`;
       phone: cleanRecipient,
       tokenNumber: token,
       estWaitTime: waitTime,
+      templateName: effectiveTemplateName,
+      error: dispatchResult.error || null,
+      errorCode: dispatchResult.errorCode,
+      errorSubcode: dispatchResult.errorSubcode,
+      metaError: dispatchResult.metaError,
       directLink: dispatchResult.directLink,
       elapsedMs,
-      message: 'Token alert dispatched successfully'
+      message: dispatchResult.delivered ? 'Token alert dispatched successfully' : `Delivery failed: ${dispatchResult.error || 'Meta error'}`
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
