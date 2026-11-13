@@ -379,7 +379,95 @@ app.post(['/webhook/whatsapp', '/api/webhook/whatsapp'], async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------
-// FEATURE 1: Automated Queue Check-in Alert
+// FEATURE 1: Official Token Alert API (/api/send-token-alert & /send-token-alert)
+// Triggered dynamically across all checkin pages: admin.goyoh.in/checkin/[clinic-slug]
+// Receives: { clinicSlug, name, phone, tokenNumber, estWaitTime }
+// ----------------------------------------------------------------------------
+app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      clinicSlug,
+      name,
+      phone,
+      tokenNumber,
+      estWaitTime,
+      clinicName,
+      doctorName,
+      roomNumber,
+      waitingCount,
+      trackerUrl
+    } = req.body;
+
+    const patientName = String(name || req.body.patientName || 'Patient').trim();
+    const rawPhone = String(phone || req.body.mobileNumber || '').trim();
+    const token = String(tokenNumber || req.body.token || '#1').trim();
+    const slug = String(clinicSlug || req.body.slug || 'apollo-clinic').trim();
+    const waitTime = String(estWaitTime || req.body.estimatedWaitTime || req.body.estimatedWaitMinutes || '10 mins').trim();
+
+    if (!rawPhone || rawPhone.length < 5) {
+      return res.status(400).json({ error: 'Valid recipient mobile phone number is required' });
+    }
+
+    const cleanRecipient = formatWhatsAppPhone(rawPhone);
+    const readableClinic = clinicName || slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const docName = doctorName || 'Consulting Physician';
+    const room = roomNumber || 'Consultation Room 1';
+    const cleanTokenNum = token.replace(/[^0-9]/g, '') || '1';
+    const queueLink = trackerUrl || `https://admin.goyoh.in/queue/${slug}?token=${cleanTokenNum}`;
+
+    const templateMessage = 
+`🏥 *${readableClinic} • GOYOH Health Connect*
+
+Namaste *${patientName}*! Your digital queue token is confirmed:
+
+🎫 *Token Number:* ${token}
+🩺 *Doctor:* ${docName}
+📍 *Room:* ${room}
+⏱️ *Est. Wait Time:* ~${waitTime.replace(/^~+/, '')} ${waitingCount ? `(${waitingCount} patient(s) ahead)` : ''}
+
+🔴 *Track Your Live Queue Status:*
+${queueLink}
+
+_Please arrive near your consultation room when your token is called._`;
+
+    // Forward to Render 24/7 backend endpoint
+    fetch('https://smart-clinic-whatsapp-webhook.onrender.com/api/send-token-alert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    }).catch(() => {});
+
+    // Also dispatch directly via Cloud Functions Meta Cloud API integration
+    const dispatchResult = await sendMetaWhatsAppMessage({
+      toPhone: cleanRecipient,
+      messageText: templateMessage,
+      clinicSlug: slug
+    });
+
+    const elapsedMs = Date.now() - startTime;
+    return res.status(200).json({
+      success: true,
+      delivered: dispatchResult.delivered,
+      mode: dispatchResult.mode,
+      messageId: dispatchResult.messageId || null,
+      recipient: cleanRecipient,
+      clinicSlug: slug,
+      name: patientName,
+      phone: cleanRecipient,
+      tokenNumber: token,
+      estWaitTime: waitTime,
+      directLink: dispatchResult.directLink,
+      elapsedMs,
+      message: 'Token alert dispatched successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// FEATURE 1B: Automated Queue Check-in Alert (Legacy / Fallback)
 // ----------------------------------------------------------------------------
 app.post(['/notifications/queue-checkin', '/api/notifications/queue-checkin'], async (req, res) => {
   try {

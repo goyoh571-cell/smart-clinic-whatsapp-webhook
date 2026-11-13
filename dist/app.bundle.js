@@ -2447,8 +2447,21 @@ function App() {
       console.warn('[Registration Rejected] Real patient name and phone are strictly required.');
       return null;
     }
-    const targetSlug = canonicalSlug(rawTargetSlug) || rawTargetSlug;
-    const targetDoc = doctorsList.find(d => canonicalSlug(d.clinicSlug) === targetSlug || d.clinicSlug === rawTargetSlug) || publicPatientDoctor;
+
+    // Dynamically extract clinic slug from URL pathname (admin.goyoh.in/checkin/[clinic-slug])
+    let urlSlug = '';
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname || '';
+      const hash = window.location.hash || '';
+      if (path.includes('/checkin/')) {
+        urlSlug = path.split('/checkin/')[1]?.split('/')[0]?.split('?')[0];
+      } else if (hash.includes('/checkin/')) {
+        urlSlug = hash.split('/checkin/')[1]?.split('/')[0]?.split('?')[0];
+      }
+    }
+    const effectiveRawSlug = urlSlug || rawTargetSlug || publicPatientDoctor.clinicSlug;
+    const targetSlug = canonicalSlug(effectiveRawSlug) || effectiveRawSlug;
+    const targetDoc = doctorsList.find(d => canonicalSlug(d.clinicSlug) === targetSlug || d.clinicSlug === effectiveRawSlug) || publicPatientDoctor;
     const targetQ = getQueueForSlug(clinicQueues, targetSlug);
     const waitingCount = targetQ.filter(t => t.status === 'WAITING').length;
     const patientPosition = waitingCount + 1;
@@ -2493,38 +2506,49 @@ function App() {
     const effectiveBase = (qrBaseUrl || typeof window !== 'undefined' && localStorage.getItem('goyoh_qr_base_url') || window.location.origin).replace(/\/+$/, '');
     const trackerUrl = `${effectiveBase}/queue/${targetSlug}?token=${tokenCount}`;
 
-    // 1. Dispatch Automated Queue Check-in Alert (Meta Cloud API / Cloud Functions)
-    const checkinAlertPayload = {
-      phone: phone.trim(),
-      patientName: name.trim(),
-      tokenNumber,
+    // 1. Dispatch POST request to Render backend endpoint (/api/send-token-alert)
+    const tokenAlertPayload = {
       clinicSlug: targetSlug,
+      name: cleanName,
+      phone: cleanPhone,
+      tokenNumber,
+      estWaitTime: `~${estimatedWaitMinutes} mins`,
+      estimatedWaitMinutes,
+      waitingCount,
       clinicName: targetDoc.clinicName,
       doctorName: targetDoc.doctorName,
       roomNumber: targetDoc.roomNumber,
-      estimatedWaitMinutes,
-      waitingCount,
       trackerUrl
     };
+    const RENDER_ENDPOINT = 'https://smart-clinic-whatsapp-webhook.onrender.com/api/send-token-alert';
+    fetch(RENDER_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(tokenAlertPayload)
+    }).then(r => r.json()).then(res => {
+      console.log('[Render /api/send-token-alert] Dispatched token alert:', res);
+    }).catch(err => {
+      console.warn('[Render /api/send-token-alert] Notice:', err);
+    });
+
+    // Also ping relative endpoint on current server
+    fetch(`${serverUrl}/api/send-token-alert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(tokenAlertPayload)
+    }).catch(() => {});
+
+    // Ping legacy queue-checkin route for universal backwards compatibility
     fetch(`${serverUrl}/api/notifications/queue-checkin`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(checkinAlertPayload)
-    }).then(r => r.json()).then(res => {
-      console.log('[Queue Check-in Alert] Meta Cloud API response:', res);
-    }).catch(err => {
-      console.warn('[Queue Check-in Alert] Fallback:', err);
-    });
-
-    // Also ping universal notification route for full backwards compatibility
-    fetch(`${serverUrl}/api/notifications/whatsapp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(checkinAlertPayload)
+      body: JSON.stringify(tokenAlertPayload)
     }).catch(() => {});
 
     // 2. Write patient check-in directly to Cloud Firestore (Serverless)
@@ -4757,13 +4781,26 @@ function MobileCheckinLandingView({
       setErrorMsg('Please enter a valid 10-digit mobile number');
       return;
     }
+
+    // Dynamically extract clinic slug from URL pathname across all check-in routes (admin.goyoh.in/checkin/[clinic-slug])
+    let dynamicClinicSlug = '';
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname || '';
+      const hash = window.location.hash || '';
+      if (path.includes('/checkin/')) {
+        dynamicClinicSlug = path.split('/checkin/')[1]?.split('/')[0]?.split('?')[0];
+      } else if (hash.includes('/checkin/')) {
+        dynamicClinicSlug = hash.split('/checkin/')[1]?.split('/')[0]?.split('?')[0];
+      }
+    }
+    const effectiveClinicSlug = dynamicClinicSlug || doctor?.clinicSlug || 'apollo-clinic';
     setIsSubmitting(true);
     try {
       if (navigator.vibrate) {
         navigator.vibrate([100, 50, 100]);
       }
     } catch (err) {}
-    onRegister(cleanName, `+91 ${cleanPhone}`, '', doctor.clinicSlug);
+    onRegister(cleanName, `+91 ${cleanPhone}`, '', effectiveClinicSlug);
   };
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-6 font-sans selection:bg-teal-500 selection:text-slate-950"

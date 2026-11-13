@@ -304,7 +304,108 @@ app.all(['/api/test/send-whatsapp', '/test/send'], async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------
-// 5. QUEUE CHECK-IN ALERT API
+// 5. OFFICIAL TOKEN ALERT API (/api/send-token-alert & /send-token-alert)
+// Triggered dynamically across all checkin pages: admin.goyoh.in/checkin/[clinic-slug]
+// Receives: { clinicSlug, name, phone, tokenNumber, estWaitTime }
+// Dispatches personalized token notification template directly to patient's mobile
+// ----------------------------------------------------------------------------
+app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      clinicSlug,
+      name,
+      phone,
+      tokenNumber,
+      estWaitTime,
+      clinicName,
+      doctorName,
+      roomNumber,
+      waitingCount,
+      trackerUrl
+    } = req.body;
+
+    const patientName = String(name || req.body.patientName || 'Patient').trim();
+    const rawPhone = String(phone || req.body.mobileNumber || '').trim();
+    const token = String(tokenNumber || req.body.token || '#1').trim();
+    const slug = String(clinicSlug || req.body.slug || 'apollo-clinic').trim();
+    const waitTime = String(estWaitTime || req.body.estimatedWaitTime || req.body.estimatedWaitMinutes || '10 mins').trim();
+
+    if (!rawPhone || rawPhone.length < 5) {
+      return res.status(400).json({ error: 'Valid recipient mobile phone number is required' });
+    }
+
+    const cleanRecipient = formatPhone(rawPhone);
+    const readableClinic = clinicName || slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const docName = doctorName || 'Consulting Physician';
+    const room = roomNumber || 'Consultation Room 1';
+    const cleanTokenNum = token.replace(/[^0-9]/g, '') || '1';
+    const queueLink = trackerUrl || `https://admin.goyoh.in/queue/${slug}?token=${cleanTokenNum}`;
+
+    // Personalized WhatsApp Token Notification Message Template
+    const templateMessage = 
+`🏥 *${readableClinic} • GOYOH Health Connect*
+
+Namaste *${patientName}*! Your digital queue token is confirmed:
+
+🎫 *Token Number:* ${token}
+🩺 *Doctor:* ${docName}
+📍 *Room:* ${room}
+⏱️ *Est. Wait Time:* ~${waitTime.replace(/^~+/, '')} ${waitingCount ? `(${waitingCount} patient(s) ahead)` : ''}
+
+🔴 *Track Your Live Queue Status:*
+${queueLink}
+
+_Please arrive near your consultation room when your token is called._`;
+
+    console.log(`[Token Alert API] Dispatching token ${token} to ${patientName} (${cleanRecipient}) for clinic: ${slug}...`);
+
+    // Dispatch directly via Meta WhatsApp Cloud API
+    const result = await sendMetaWhatsAppMessage({
+      to: cleanRecipient,
+      messageText: templateMessage
+    });
+
+    const elapsedMs = Date.now() - startTime;
+
+    // Save event to Firestore
+    await saveToFirestore('whatsapp_logs', {
+      type: 'TOKEN_ALERT',
+      clinicSlug: slug,
+      patientName,
+      phone: cleanRecipient,
+      tokenNumber: token,
+      estWaitTime: waitTime,
+      delivered: result.delivered,
+      mode: result.mode,
+      messageId: result.messageId || null,
+      elapsedMs,
+      timestamp: new Date().toISOString()
+    });
+
+    return res.status(200).json({
+      success: true,
+      delivered: result.delivered,
+      mode: result.mode,
+      messageId: result.messageId || null,
+      recipient: cleanRecipient,
+      clinicSlug: slug,
+      name: patientName,
+      phone: cleanRecipient,
+      tokenNumber: token,
+      estWaitTime: waitTime,
+      directLink: result.directLink,
+      elapsedMs,
+      message: `Token alert dispatched to ${cleanRecipient} via Meta WhatsApp Cloud API in ${(elapsedMs / 1000).toFixed(2)}s`
+    });
+  } catch (error) {
+    console.error('[Token Alert Error]:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// 6. QUEUE CHECK-IN ALERT API (Legacy & Fallback)
 // ----------------------------------------------------------------------------
 app.post(['/notifications/queue-checkin', '/api/notifications/queue-checkin'], async (req, res) => {
   try {

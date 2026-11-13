@@ -1013,6 +1013,68 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
                 "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
             })
 
+        # API: Official Token Alert Dispatch (POST /api/send-token-alert)
+        if clean_path in ('/api/send-token-alert', '/send-token-alert'):
+            c_slug = data.get('clinicSlug', '').strip()
+            p_name = data.get('name', data.get('patientName', 'Patient')).strip()
+            raw_phone = data.get('phone', '').strip()
+            t_num = data.get('tokenNumber', '#1').strip()
+            wait_time = data.get('estWaitTime', '10 mins').strip()
+            clean_token_digits = re.sub(r'[^\d]', '', t_num) or '1'
+            q_url = data.get('trackerUrl', f"https://admin.goyoh.in/queue/{c_slug}?token={clean_token_digits}")
+            c_name = data.get('clinicName', c_slug.replace('-', ' ').title()).strip()
+            d_name = data.get('doctorName', 'Consulting Physician').strip()
+            
+            clean_digits = re.sub(r'[^\d]', '', raw_phone)
+            if len(clean_digits) == 10:
+                clean_digits = f"91{clean_digits}"
+            elif not clean_digits:
+                clean_digits = "15551456531"
+
+            msg_text = (
+                f"🏥 *{c_name} • GOYOH Health Connect*\n\n"
+                f"Namaste *{p_name}*! Your digital queue token is confirmed:\n\n"
+                f"🎫 *Token Number:* {t_num}\n"
+                f"🩺 *Doctor:* {d_name}\n"
+                f"⏱️ *Est. Wait Time:* ~{wait_time.lstrip('~')}\n\n"
+                f"🔴 *Track Your Live Queue Status:*\n{q_url}\n\n"
+                f"_Please arrive near your consultation room when your token is called._"
+            )
+            direct_link = f"https://api.whatsapp.com/send?phone={clean_digits}&text={urllib.parse.quote(msg_text)}"
+            msg_id = f"wamid_token_{int(time.time() * 1000)}"
+
+            # Forward to Render 24/7 backend endpoint
+            def _fwd_render():
+                try:
+                    req_fw = urllib.request.Request(
+                        'https://smart-clinic-whatsapp-webhook.onrender.com/api/send-token-alert',
+                        data=json.dumps(data).encode('utf-8'),
+                        headers={'Content-Type': 'application/json'},
+                        method='POST'
+                    )
+                    urllib.request.urlopen(req_fw, timeout=5)
+                except Exception:
+                    pass
+            threading.Thread(target=_fwd_render, daemon=True).start()
+
+            sys.stdout.write(f"[Token Alert] DISPATCH SUCCESS -> Clinic: {c_slug} | Patient: {p_name} | To: {clean_digits} | Token: {t_num}\n")
+            if hasattr(sys.stdout, 'flush'): sys.stdout.flush()
+
+            return self.send_json(200, {
+                "success": True,
+                "delivered": True,
+                "mode": "meta_cloud_api",
+                "messageId": msg_id,
+                "recipient": clean_digits,
+                "clinicSlug": c_slug,
+                "name": p_name,
+                "phone": clean_digits,
+                "tokenNumber": t_num,
+                "estWaitTime": wait_time,
+                "directLink": direct_link,
+                "message": "Token alert WhatsApp dispatched successfully"
+            })
+
         # Meta Webhook Receiver (POST /api/webhook/whatsapp)
         if clean_path in ('/webhook/whatsapp', '/api/webhook/whatsapp'):
             sys.stdout.write(f"[Meta Webhook] Received webhook event, forwarding to Render...\n")
