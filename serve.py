@@ -591,11 +591,12 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
                 "success": True,
                 "configured": True,
                 "hasToken": True,
-                "phoneNumberId": "1048...9201",
+                "phoneNumberId": "1378688712001380",
+                "testNumber": "+1 (555) 145-6531",
                 "verifyToken": "GOYOH_HEALTH_CONNECT_VERIFY_TOKEN",
                 "webhookUrl": "https://smart-clinic-whatsapp-webhook.onrender.com/webhook",
                 "liveWebhookEndpoint": "https://smart-clinic-whatsapp-webhook.onrender.com/webhook",
-                "source": "render_24_7"
+                "source": "meta_cloud_api"
             })
 
         # API: Super Admin Metrics (100% dynamic - starts at 0 until clinics/queues are active)

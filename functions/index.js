@@ -59,10 +59,11 @@ async function getWhatsAppCredentials(clinicSlug) {
     console.warn('[WhatsApp Config] Firestore lookup notice:', err.message);
   }
 
-  // 3. Fallback to environment variables
+  // 3. Fallback to environment variables or active defaults
   return {
-    token: process.env.WHATSAPP_TOKEN || functions.config()?.whatsapp?.token || '',
-    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || functions.config()?.whatsapp?.phone_id || '',
+    token: process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || functions.config()?.whatsapp?.token || 'EABBS0XEoHBQBS5lZCoWetNjSI5kWkYKFEbvkpb2VZCNCUmk9avtgalUbyu184Wepy89iQqLGzqNwJassfwW4E8LEZBfkQSBpSQE8TQcuhSso7KCZCTQtZBbalNnDq3U6x3kOlRYlveCb8XYlzTNV5dFgp1UhT4cx9ZCsYTNkRZCiBED8NDefGcEGIA3FmQDuo9mUVt7HYnfI79MpLr0jnJ3kbi21osdMOGBA6g6GA8n9NZCrz4FqRymuXZAKHu5FfLEZBf3b2WuwZB281k2ABnLLkxS',
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || functions.config()?.whatsapp?.phone_id || '1378688712001380',
+    testNumber: process.env.WHATSAPP_TEST_NUMBER || '+1 (555) 145-6531',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || functions.config()?.whatsapp?.verify_token || 'GOYOH_HEALTH_CONNECT_VERIFY_TOKEN',
     source: 'environment'
   };

@@ -5,3 +5,14 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: node server.js
+    envVars:
+      - key: WHATSAPP_ACCESS_TOKEN
+        value: "EABBS0XEoHBQBS5lZCoWetNjSI5kWkYKFEbvkpb2VZCNCUmk9avtgalUbyu184Wepy89iQqLGzqNwJassfwW4E8LEZBfkQSBpSQE8TQcuhSso7KCZCTQtZBbalNnDq3U6x3kOlRYlveCb8XYlzTNV5dFgp1UhT4cx9ZCsYTNkRZCiBED8NDefGcEGIA3FmQDuo9mUVt7HYnfI79MpLr0jnJ3kbi21osdMOGBA6g6GA8n9NZCrz4FqRymuXZAKHu5FfLEZBf3b2WuwZB281k2ABnLLkxS"
+      - key: WHATSAPP_TOKEN
+        value: "EABBS0XEoHBQBS5lZCoWetNjSI5kWkYKFEbvkpb2VZCNCUmk9avtgalUbyu184Wepy89iQqLGzqNwJassfwW4E8LEZBfkQSBpSQE8TQcuhSso7KCZCTQtZBbalNnDq3U6x3kOlRYlveCb8XYlzTNV5dFgp1UhT4cx9ZCsYTNkRZCiBED8NDefGcEGIA3FmQDuo9mUVt7HYnfI79MpLr0jnJ3kbi21osdMOGBA6g6GA8n9NZCrz4FqRymuXZAKHu5FfLEZBf3b2WuwZB281k2ABnLLkxS"
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        value: "1378688712001380"
+      - key: WHATSAPP_TEST_NUMBER
+        value: "+1 (555) 145-6531"
+      - key: VERIFY_TOKEN
+        value: "GOYOH_HEALTH_CONNECT_VERIFY_TOKEN"
