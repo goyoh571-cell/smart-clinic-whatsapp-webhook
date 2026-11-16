@@ -326,11 +326,13 @@ app.get(['/webhook', '/api/webhook/whatsapp', '/api/webhook'], (req, res) => {
 });
 
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // 3. META WHATSAPP EVENT RECEIVER (POST Incoming Messages & Status Updates)
 // ----------------------------------------------------------------------------
 app.post(['/webhook', '/api/webhook/whatsapp', '/api/webhook'], async (req, res) => {
   const body = req.body || {};
   console.log('[Meta Webhook POST] Payload received at:', new Date().toISOString());
+  console.log('[Meta Webhook POST] Full Body:', JSON.stringify(body, null, 2));
 
   if (body.object === 'whatsapp_business_account' || body.entry) {
     try {
