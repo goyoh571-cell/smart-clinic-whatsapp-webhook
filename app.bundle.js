@@ -2521,7 +2521,7 @@ function App() {
       trackerUrl,
       templateName: 'patient_token_alert',
       languageCode: 'en',
-      parameters: [cleanName, tokenNumber, targetDoc.clinicName, `~${estimatedWaitMinutes} mins`, targetDoc.doctorName]
+      parameters: [cleanName, tokenNumber, `~${estimatedWaitMinutes} mins`]
     };
 
     // 1. Dispatch POST request directly to the full Render backend endpoint (24/7 Webhook)

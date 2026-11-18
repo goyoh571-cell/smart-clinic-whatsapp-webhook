@@ -487,14 +487,14 @@ _Please arrive near your consultation room when your token is called._`;
     const effectiveTemplateName = (templateName || template || process.env.WHATSAPP_TEMPLATE_NAME || 'patient_token_alert').trim();
     const effectiveLanguageCode = (languageCode || language || process.env.WHATSAPP_TEMPLATE_LANG || 'en').trim();
 
+    // Approved Meta template 'patient_token_alert' expects 3 parameters:
+    // {{1}} Patient Name, {{2}} Token Number, {{3}} Estimated Wait Time
     let effectiveParams = parameters || templateParams;
     if (!effectiveParams && effectiveTemplateName !== 'hello_world') {
       effectiveParams = [
         patientName,
         token,
-        readableClinic,
-        waitTime.replace(/^~+/, ''),
-        docName
+        waitTime.replace(/^~+/, '')
       ];
     }
 

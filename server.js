@@ -161,6 +161,52 @@ async function sendMetaWhatsAppMessage({
     } else {
       console.error(`❌ [Meta Outbound REJECTED] Status ${response.status}:`, JSON.stringify(resJson.error || resJson));
 
+      // If error indicates parameter count mismatch (e.g. 5 params sent vs 3 expected by approved template)
+      if (isTemplateMode && resJson.error?.code === 132000 && String(resJson.error?.error_data?.details || '').includes('(3)') && Array.isArray(parameters) && parameters.length > 3) {
+        console.warn(`[Meta Template Retry] Retrying template '${templateName}' with approved 3 parameters...`);
+        try {
+          const retryPayload = {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanTo,
+            type: 'template',
+            template: {
+              name: templateName,
+              language: { code: languageCode || 'en' },
+              components: [
+                {
+                  type: 'body',
+                  parameters: parameters.slice(0, 3).map(p => (typeof p === 'object' && p && p.type) ? p : { type: 'text', text: String(p ?? '') })
+                }
+              ]
+            }
+          };
+          const rResp = await fetch(metaUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(retryPayload)
+          });
+          const rJson = await rResp.json().catch(() => ({}));
+          if (rResp.ok && Array.isArray(rJson.messages) && rJson.messages.length > 0) {
+            const rMsgId = rJson.messages[0].id;
+            console.log(`✓ [Meta Outbound SUCCESS via 3-param Retry] Sent to: ${cleanTo} | Message ID: ${rMsgId}`);
+            return {
+              success: true,
+              delivered: true,
+              mode: 'meta_cloud_api',
+              messageId: rMsgId,
+              templateName,
+              recipient: cleanTo,
+              directLink,
+              raw: rJson
+            };
+          }
+        } catch (rErr) {}
+      }
+
       // If a custom template failed with error 132000 (template does not exist) and templateName is not hello_world,
       // attempt fallback to pre-approved 'hello_world' in test accounts
       if (isTemplateMode && templateName !== 'hello_world' && (resJson.error?.code === 132000 || resJson.error?.error_subcode === 2494011)) {
@@ -473,19 +519,16 @@ _Please arrive near your consultation room when your token is called._`;
     const effectiveLanguageCode = (languageCode || language || process.env.WHATSAPP_TEMPLATE_LANG || 'en').trim();
 
     // Determine Template Body Parameters:
+    // Approved Meta template 'patient_token_alert' expects 3 parameters:
     // {{1}} Patient Name
     // {{2}} Token Number
-    // {{3}} Clinic Name
-    // {{4}} Estimated Wait Time
-    // {{5}} Doctor Name
+    // {{3}} Estimated Wait Time
     let effectiveParams = parameters || templateParams;
     if (!effectiveParams && effectiveTemplateName !== 'hello_world') {
       effectiveParams = [
         patientName,
         token,
-        readableClinic,
-        waitTime.replace(/^~+/, ''),
-        docName
+        waitTime.replace(/^~+/, '')
       ];
     }
 
