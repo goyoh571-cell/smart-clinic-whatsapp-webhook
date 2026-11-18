@@ -57,7 +57,7 @@ async function sendMetaWhatsAppMessage({
   mediaUrl,
   filename,
   templateName,
-  languageCode = 'en_US',
+  languageCode = 'en',
   parameters = [],
   components = null
 }) {
@@ -76,7 +76,7 @@ async function sendMetaWhatsAppMessage({
     const templatePayload = {
       name: templateName,
       language: {
-        code: languageCode || 'en_US'
+        code: languageCode || 'en'
       }
     };
 
@@ -173,7 +173,7 @@ async function sendMetaWhatsAppMessage({
             type: 'template',
             template: {
               name: 'hello_world',
-              language: { code: 'en_US' }
+              language: { code: 'en' }
             }
           };
           const fbResp = await fetch(metaUrl, {
@@ -326,7 +326,6 @@ app.get(['/webhook', '/api/webhook/whatsapp', '/api/webhook'], (req, res) => {
 });
 
 // ----------------------------------------------------------------------------
-// ----------------------------------------------------------------------------
 // 3. META WHATSAPP EVENT RECEIVER (POST Incoming Messages & Status Updates)
 // ----------------------------------------------------------------------------
 app.post(['/webhook', '/api/webhook/whatsapp', '/api/webhook'], async (req, res) => {
@@ -471,7 +470,7 @@ _Please arrive near your consultation room when your token is called._`;
 
     // Determine WhatsApp Template Name and Language
     const effectiveTemplateName = (templateName || template || process.env.WHATSAPP_TEMPLATE_NAME || 'patient_token_alert').trim();
-    const effectiveLanguageCode = (languageCode || language || process.env.WHATSAPP_TEMPLATE_LANG || 'en_US').trim();
+    const effectiveLanguageCode = (languageCode || language || process.env.WHATSAPP_TEMPLATE_LANG || 'en').trim();
 
     // Determine Template Body Parameters:
     // {{1}} Patient Name
@@ -605,7 +604,7 @@ app.post(['/notifications/queue-checkin', '/api/notifications/queue-checkin'], a
 });
 
 // ----------------------------------------------------------------------------
-// 6. 10-SECOND PRESCRIPTION DISPATCH API
+// 7. 10-SECOND PRESCRIPTION DISPATCH API
 // ----------------------------------------------------------------------------
 app.post(['/notifications/prescription-dispatch', '/api/notifications/prescription-dispatch'], async (req, res) => {
   const startTime = Date.now();
