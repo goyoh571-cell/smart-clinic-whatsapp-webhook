@@ -2520,7 +2520,7 @@ function App() {
       roomNumber: targetDoc.roomNumber,
       trackerUrl,
       templateName: 'patient_token_alert',
-      languageCode: 'en_US',
+      languageCode: 'en',
       parameters: [cleanName, tokenNumber, targetDoc.clinicName, `~${estimatedWaitMinutes} mins`, targetDoc.doctorName]
     };
 

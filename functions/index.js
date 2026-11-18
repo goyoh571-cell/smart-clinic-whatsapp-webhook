@@ -77,7 +77,7 @@ async function sendMetaWhatsAppMessage({
   filename,
   clinicSlug,
   templateName,
-  languageCode = 'en_US',
+  languageCode = 'en',
   parameters = [],
   components = null,
   metadata = {}
@@ -123,7 +123,7 @@ async function sendMetaWhatsAppMessage({
     const templatePayload = {
       name: templateName,
       language: {
-        code: languageCode || 'en_US'
+        code: languageCode || 'en'
       }
     };
     if (templateName !== 'hello_world') {
@@ -485,7 +485,7 @@ ${queueLink}
 _Please arrive near your consultation room when your token is called._`;
 
     const effectiveTemplateName = (templateName || template || process.env.WHATSAPP_TEMPLATE_NAME || 'patient_token_alert').trim();
-    const effectiveLanguageCode = (languageCode || language || process.env.WHATSAPP_TEMPLATE_LANG || 'en_US').trim();
+    const effectiveLanguageCode = (languageCode || language || process.env.WHATSAPP_TEMPLATE_LANG || 'en').trim();
 
     let effectiveParams = parameters || templateParams;
     if (!effectiveParams && effectiveTemplateName !== 'hello_world') {
