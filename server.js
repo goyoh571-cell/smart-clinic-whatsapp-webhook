@@ -409,8 +409,8 @@ app.all(['/api/test/send-whatsapp', '/test/send'], async (req, res) => {
 // ----------------------------------------------------------------------------
 // 5. OFFICIAL TOKEN ALERT API (/api/send-token-alert & /send-token-alert)
 // Triggered dynamically across all checkin pages: admin.goyoh.in/checkin/[clinic-slug]
-// Receives: { clinicSlug, name, phone, tokenNumber, estWaitTime, templateName, parameters }
-// Dispatches personalized token notification template directly to patient's mobile
+// Receives: { clinicSlug, name, phone, tokenNumber, estWaitTime, ... }
+// Dispatches detailed token notification directly to patient's mobile
 // ----------------------------------------------------------------------------
 app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
   const startTime = Date.now();
@@ -425,12 +425,7 @@ app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
       doctorName,
       roomNumber,
       waitingCount,
-      trackerUrl,
-      templateName,
-      template,
-      parameters,
-      templateParams,
-      components
+      trackerUrl
     } = req.body;
 
     const patientName = String(name || req.body.patientName || 'Patient').trim();
@@ -450,53 +445,32 @@ app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
     const cleanTokenNum = token.replace(/[^0-9]/g, '') || '1';
     const queueLink = trackerUrl || `https://admin.goyoh.in/queue/${slug}?token=${cleanTokenNum}`;
 
-    // Personalized WhatsApp Message Text (used for directLink and fallback)
-    const fallbackMessageText = 
-`🏥 *${readableClinic} • GOYOH Health Connect*
+    // Keep language code variable set to 'en' for consistency
+    const effectiveLanguageCode = 'en';
 
-Namaste *${patientName}*! Your digital queue token is confirmed:
+    // Detailed WhatsApp Message Text matching the preferred token format
+    const detailedMessageText =
+`🏥 *${readableClinic}*
 
-🎫 *Token Number:* ${token}
+Namaste *${patientName}*, your digital queue token is confirmed!
+
+🎫 *Your Token:* ${token}
 🩺 *Doctor:* ${docName}
 📍 *Room:* ${room}
-⏱️ *Est. Wait Time:* ~${waitTime.replace(/^~+/, '')} ${waitingCount ? `(${waitingCount} patient(s) ahead)` : ''}
+⏱️ *Est. Wait Time:* ~${waitTime.replace(/^~+/, '')} (${waitingCount || 0} patient(s) ahead)
 
 🔴 *Track Your Live Queue Status:*
 ${queueLink}
 
 _Please arrive near your consultation room when your token is called._`;
 
-    // Determine WhatsApp Template Name and FORCE language code to 'en' to prevent en_US mismatch errors
-    const effectiveTemplateName = (templateName || template || process.env.WHATSAPP_TEMPLATE_NAME || 'patient_token_alert').trim();
-    const effectiveLanguageCode = 'en';
+    console.log(`[Token Alert API] Dispatching detailed token alert ${token} to ${patientName} (${cleanRecipient}) (lang: ${effectiveLanguageCode})...`);
 
-    // Determine Template Body Parameters:
-    // {{1}} Patient Name
-    // {{2}} Token Number
-    // {{3}} Clinic Name
-    // {{4}} Estimated Wait Time
-    // {{5}} Doctor Name
-    let effectiveParams = parameters || templateParams;
-    if (!effectiveParams && effectiveTemplateName !== 'hello_world') {
-      effectiveParams = [
-        patientName,
-        token,
-        readableClinic,
-        waitTime.replace(/^~+/, ''),
-        docName
-      ];
-    }
-
-    console.log(`[Token Alert API] Dispatching token ${token} to ${patientName} (${cleanRecipient}) via template: "${effectiveTemplateName}" (lang: ${effectiveLanguageCode})...`);
-
-    // Dispatch directly via Meta WhatsApp Cloud API with template & parameters
+    // Dispatch detailed text directly via Meta WhatsApp Cloud API
     const result = await sendMetaWhatsAppMessage({
       to: cleanRecipient,
-      messageText: fallbackMessageText,
-      templateName: effectiveTemplateName,
-      languageCode: effectiveLanguageCode,
-      parameters: effectiveTemplateName === 'hello_world' ? [] : effectiveParams,
-      components: components || null
+      messageText: detailedMessageText,
+      languageCode: effectiveLanguageCode
     });
 
     const elapsedMs = Date.now() - startTime;
@@ -509,7 +483,7 @@ _Please arrive near your consultation room when your token is called._`;
       phone: cleanRecipient,
       tokenNumber: token,
       estWaitTime: waitTime,
-      templateName: result.templateName || effectiveTemplateName,
+      templateName: null,
       delivered: result.delivered,
       mode: result.mode,
       messageId: result.messageId || null,
@@ -525,15 +499,13 @@ _Please arrive near your consultation room when your token is called._`;
         mode: result.mode,
         messageId: result.messageId,
         recipient: cleanRecipient,
-        templateName: result.templateName || effectiveTemplateName,
-        parameters: effectiveParams,
         clinicSlug: slug,
         name: patientName,
         tokenNumber: token,
         estWaitTime: waitTime,
         directLink: result.directLink,
         elapsedMs,
-        message: `Token alert dispatched to ${cleanRecipient} via Meta WhatsApp Cloud API template [${result.templateName || effectiveTemplateName}] in ${(elapsedMs / 1000).toFixed(2)}s`
+        message: `Detailed token alert dispatched to ${cleanRecipient} in ${(elapsedMs / 1000).toFixed(2)}s`
       });
     } else {
       return res.status(200).json({
@@ -541,8 +513,6 @@ _Please arrive near your consultation room when your token is called._`;
         delivered: false,
         mode: result.mode,
         recipient: cleanRecipient,
-        templateName: effectiveTemplateName,
-        parameters: effectiveParams,
         clinicSlug: slug,
         name: patientName,
         tokenNumber: token,
@@ -553,7 +523,7 @@ _Please arrive near your consultation room when your token is called._`;
         metaError: result.metaError,
         directLink: result.directLink,
         elapsedMs,
-        message: `Meta Cloud API delivery failed: ${result.error}. Pre-filled direct link available.`
+        message: `WhatsApp delivery failed: ${result.error}. Pre-filled direct link available.`
       });
     }
   } catch (error) {
