@@ -407,10 +407,10 @@ app.all(['/api/test/send-whatsapp', '/test/send'], async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // 5. OFFICIAL TOKEN ALERT API (/api/send-token-alert & /send-token-alert)
 // Triggered dynamically across all checkin pages: admin.goyoh.in/checkin/[clinic-slug]
-// Receives: { clinicSlug, name, phone, tokenNumber, estWaitTime, ... }
-// Dispatches detailed token notification directly to patient's mobile
+// Dispatches approved 'detailed_token_alert' template directly to patient's mobile
 // ----------------------------------------------------------------------------
 app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
   const startTime = Date.now();
@@ -443,13 +443,35 @@ app.post(['/api/send-token-alert', '/send-token-alert'], async (req, res) => {
     const docName = doctorName || 'Consulting Physician';
     const room = roomNumber || 'Consultation Room 1';
     const cleanTokenNum = token.replace(/[^0-9]/g, '') || '1';
+    const cleanWaitTime = waitTime.replace(/^~+/, '');
+    const queueAheadCount = String(waitingCount ?? 0);
     const queueLink = trackerUrl || `https://admin.goyoh.in/queue/${slug}?token=${cleanTokenNum}`;
 
-    // Keep language code variable set to 'en' for consistency
+    // Force approved template name and language code ('en')
+    const effectiveTemplateName = 'detailed_token_alert';
     const effectiveLanguageCode = 'en';
 
-    // Detailed WhatsApp Message Text matching the preferred token format
-    const detailedMessageText =
+    // Exact 8 parameters matching detailed_token_alert in Meta WhatsApp Manager:
+    // {{1}} Clinic Name
+    // {{2}} Patient Name
+    // {{3}} Token Number
+    // {{4}} Doctor Name
+    // {{5}} Room Number
+    // {{6}} Estimated Wait Time
+    // {{7}} Patients Ahead Count
+    // {{8}} Live Queue Tracker URL
+    const effectiveParams = [
+      readableClinic,
+      patientName,
+      token,
+      docName,
+      room,
+      cleanWaitTime,
+      queueAheadCount,
+      queueLink
+    ];
+
+    const fallbackMessageText =
 `🏥 *${readableClinic}*
 
 Namaste *${patientName}*, your digital queue token is confirmed!
@@ -457,25 +479,25 @@ Namaste *${patientName}*, your digital queue token is confirmed!
 🎫 *Your Token:* ${token}
 🩺 *Doctor:* ${docName}
 📍 *Room:* ${room}
-⏱️ *Est. Wait Time:* ~${waitTime.replace(/^~+/, '')} (${waitingCount || 0} patient(s) ahead)
+⏱️ *Est. Wait Time:* ~${cleanWaitTime} (${queueAheadCount} patient(s) ahead)
 
 🔴 *Track Your Live Queue Status:*
 ${queueLink}
 
 _Please arrive near your consultation room when your token is called._`;
 
-    console.log(`[Token Alert API] Dispatching detailed token alert ${token} to ${patientName} (${cleanRecipient}) (lang: ${effectiveLanguageCode})...`);
+    console.log(`[Token Alert API] Dispatching token ${token} to ${patientName} (${cleanRecipient}) via template: "${effectiveTemplateName}" (lang: ${effectiveLanguageCode})...`);
 
-    // Dispatch detailed text directly via Meta WhatsApp Cloud API
     const result = await sendMetaWhatsAppMessage({
       to: cleanRecipient,
-      messageText: detailedMessageText,
-      languageCode: effectiveLanguageCode
+      messageText: fallbackMessageText,
+      templateName: effectiveTemplateName,
+      languageCode: effectiveLanguageCode,
+      parameters: effectiveParams
     });
 
     const elapsedMs = Date.now() - startTime;
 
-    // Save event to Firestore
     await saveToFirestore('whatsapp_logs', {
       type: 'TOKEN_ALERT',
       clinicSlug: slug,
@@ -483,7 +505,7 @@ _Please arrive near your consultation room when your token is called._`;
       phone: cleanRecipient,
       tokenNumber: token,
       estWaitTime: waitTime,
-      templateName: null,
+      templateName: result.templateName || effectiveTemplateName,
       delivered: result.delivered,
       mode: result.mode,
       messageId: result.messageId || null,
@@ -499,13 +521,15 @@ _Please arrive near your consultation room when your token is called._`;
         mode: result.mode,
         messageId: result.messageId,
         recipient: cleanRecipient,
+        templateName: result.templateName || effectiveTemplateName,
+        parameters: effectiveParams,
         clinicSlug: slug,
         name: patientName,
         tokenNumber: token,
         estWaitTime: waitTime,
         directLink: result.directLink,
         elapsedMs,
-        message: `Detailed token alert dispatched to ${cleanRecipient} in ${(elapsedMs / 1000).toFixed(2)}s`
+        message: `Token alert dispatched to ${cleanRecipient} via template [${effectiveTemplateName}] in ${(elapsedMs / 1000).toFixed(2)}s`
       });
     } else {
       return res.status(200).json({
@@ -513,6 +537,8 @@ _Please arrive near your consultation room when your token is called._`;
         delivered: false,
         mode: result.mode,
         recipient: cleanRecipient,
+        templateName: effectiveTemplateName,
+        parameters: effectiveParams,
         clinicSlug: slug,
         name: patientName,
         tokenNumber: token,
@@ -523,7 +549,7 @@ _Please arrive near your consultation room when your token is called._`;
         metaError: result.metaError,
         directLink: result.directLink,
         elapsedMs,
-        message: `WhatsApp delivery failed: ${result.error}. Pre-filled direct link available.`
+        message: `Meta Cloud API delivery failed: ${result.error}. Pre-filled direct link available.`
       });
     }
   } catch (error) {
@@ -531,7 +557,6 @@ _Please arrive near your consultation room when your token is called._`;
     res.status(500).json({ error: error.message });
   }
 });
-
 // ----------------------------------------------------------------------------
 // 6. QUEUE CHECK-IN ALERT API (Legacy & Fallback)
 // ----------------------------------------------------------------------------
