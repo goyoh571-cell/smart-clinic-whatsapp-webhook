@@ -97,6 +97,13 @@ class AudioAnnouncementEngine {
     }
   }
 }
+
+// Helper: Safely format token numbers ensuring exactly one '#' prefix (prevents '##16' double-hash typo)
+function formatTokenNumber(num) {
+  if (!num && num !== 0) return '';
+  const s = String(num).trim();
+  return s.startsWith('#') ? s : `#${s}`;
+}
 const audioService = new AudioAnnouncementEngine();
 function getPatientBadgeText(patient) {
   if (!patient) return null;
@@ -3468,9 +3475,9 @@ function App() {
   React.createElement("div", {
     className: "flex items-center space-x-2 sm:space-x-2.5 min-w-0"
   }, /*#__PURE__*/React.createElement("h1", {
-    className: "font-black text-sm sm:text-lg tracking-tight text-white truncate max-w-[160px] xs:max-w-[220px] sm:max-w-[320px] md:max-w-none"
+    className: "font-black text-sm sm:text-lg tracking-tight text-white truncate max-w-[150px] xs:max-w-[200px] sm:max-w-[320px] md:max-w-none"
   }, activeDoctor?.clinicName || 'Clinic'), /*#__PURE__*/React.createElement("span", {
-    className: "inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] sm:text-xs font-bold text-emerald-400 shadow-sm flex-shrink-0"
+    className: "inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] sm:text-xs font-bold text-emerald-400 shadow-sm flex-shrink-0 whitespace-nowrap"
   }, /*#__PURE__*/React.createElement("span", {
     className: "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
   }), /*#__PURE__*/React.createElement("span", null, "ACTIVE OPD"))) :
@@ -3479,11 +3486,11 @@ function App() {
   React.createElement("div", {
     className: "min-w-0 flex-1"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center space-x-2"
+    className: "flex items-center space-x-2 min-w-0"
   }, /*#__PURE__*/React.createElement("h1", {
-    className: "font-extrabold text-xs sm:text-lg tracking-tight text-white truncate max-w-[140px] xs:max-w-[180px] sm:max-w-[260px] md:max-w-none"
+    className: "font-extrabold text-xs sm:text-lg tracking-tight text-white truncate max-w-[130px] xs:max-w-[170px] sm:max-w-[260px] md:max-w-none min-w-0"
   }, activeDoctor?.clinicName || 'Clinic'), /*#__PURE__*/React.createElement("span", {
-    className: "inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400"
+    className: "inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400 whitespace-nowrap flex-shrink-0"
   }, /*#__PURE__*/React.createElement("span", {
     className: "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
   }), /*#__PURE__*/React.createElement("span", null, "ACTIVE OPD")), /*#__PURE__*/React.createElement("span", {
@@ -3646,7 +3653,7 @@ function App() {
     className: "text-slate-400 font-semibold"
   }, "Token:"), /*#__PURE__*/React.createElement("span", {
     className: "text-teal-400 font-bold"
-  }, lastCompletedRx.tokenNumber)), /*#__PURE__*/React.createElement("div", {
+  }, formatTokenNumber(lastCompletedRx.tokenNumber))), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-slate-400 font-semibold"
@@ -3693,7 +3700,7 @@ function App() {
     className: "flex items-center space-x-2"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "font-extrabold text-white text-base sm:text-lg"
-  }, "Prescription Preview: #", viewingRxModalToken.tokenNumber), /*#__PURE__*/React.createElement("span", {
+  }, "Prescription Preview: ", formatTokenNumber(viewingRxModalToken.tokenNumber)), /*#__PURE__*/React.createElement("span", {
     className: "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
   }, "COMPLETED")), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-slate-400"
@@ -3736,7 +3743,7 @@ function App() {
     className: "px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer active:scale-95 shadow-sm",
     title: "Open PDF in a new browser tab for full screen preview or browser printing"
   }, /*#__PURE__*/React.createElement("span", null, "↗️"), /*#__PURE__*/React.createElement("span", null, "Open in New Tab")), /*#__PURE__*/React.createElement("a", {
-    href: `https://api.whatsapp.com/send?phone=${(viewingRxModalToken.patient?.phone || '').replace(/[^0-9]/g, '')}&text=${encodeURIComponent(`Hello ${viewingRxModalToken.patient?.name}, here is your verified prescription from ${activeDoctor.doctorName} at ${activeDoctor.clinicName}:\n\n${viewingRxModalToken.rxNotes || 'Standard follow-up'}\n\nPrescription Ref: #${viewingRxModalToken.tokenNumber}`)}`,
+    href: `https://api.whatsapp.com/send?phone=${(viewingRxModalToken.patient?.phone || '').replace(/[^0-9]/g, '')}&text=${encodeURIComponent(`Hello ${viewingRxModalToken.patient?.name}, here is your verified prescription from ${activeDoctor.doctorName} at ${activeDoctor.clinicName}:\n\n${viewingRxModalToken.rxNotes || 'Standard follow-up'}\n\nPrescription Ref: ${formatTokenNumber(viewingRxModalToken.tokenNumber)}`)}`,
     target: "_blank",
     rel: "noopener noreferrer",
     className: "px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 hover:border-emerald-400 text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer active:scale-95 shadow-sm",
@@ -3855,46 +3862,39 @@ function App() {
     compact: true,
     qrBaseUrl: qrBaseUrl
   })))), /*#__PURE__*/React.createElement("nav", {
-    className: "md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/98 backdrop-blur-md border-t border-slate-800 px-1 py-1.5 flex items-center justify-between shadow-2xl safe-area-pb"
+    className: "md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/98 backdrop-blur-md border-t border-slate-800 px-2 py-2 flex items-center justify-around shadow-2xl safe-area-pb"
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => setDoctorViewTab('doctor'),
-    className: `flex-1 min-w-0 py-1 flex flex-col items-center justify-center rounded-lg transition ${doctorViewTab === 'doctor' ? 'text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`
+    className: `flex-1 min-w-0 py-1.5 px-1 flex flex-col items-center justify-center rounded-xl transition ${doctorViewTab === 'doctor' ? 'text-teal-400 font-bold bg-teal-500/10' : 'text-slate-200 hover:text-white hover:bg-slate-800/60 font-semibold'}`
   }, /*#__PURE__*/React.createElement("span", {
-    className: "text-base"
+    className: "text-lg"
   }, "🩺"), /*#__PURE__*/React.createElement("span", {
-    className: "text-[9px] mt-0.5 truncate font-medium"
+    className: "text-[11px] mt-0.5 whitespace-nowrap font-semibold"
   }, "Console")), /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => setShowQRModal(true),
-    className: "flex-1 min-w-0 py-1 flex flex-col items-center justify-center text-slate-400 hover:text-teal-400 rounded-lg transition"
+    className: "flex-1 min-w-0 py-1.5 px-1 flex flex-col items-center justify-center text-slate-200 hover:text-teal-300 hover:bg-slate-800/60 rounded-xl transition font-semibold"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "text-base"
+    className: "text-lg"
   }, "📱"), /*#__PURE__*/React.createElement("span", {
-    className: "text-[9px] mt-0.5 truncate font-medium"
+    className: "text-[11px] mt-0.5 whitespace-nowrap font-semibold"
   }, "Desk QR")), /*#__PURE__*/React.createElement("button", {
     type: "button",
-    onClick: handleCallNext,
-    className: "shrink-0 px-3.5 py-2 bg-gradient-to-r from-teal-500 to-emerald-400 active:scale-95 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-teal-500/30 flex items-center space-x-1 transition",
-    title: "1-Tap Call Next Patient in Line"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "text-sm"
-  }, "⚡"), /*#__PURE__*/React.createElement("span", null, "CALL NEXT")), /*#__PURE__*/React.createElement("button", {
-    type: "button",
     onClick: () => setDoctorViewTab(doctorViewTab === 'tv' ? 'doctor' : 'tv'),
-    className: `flex-1 min-w-0 py-1 flex flex-col items-center justify-center rounded-lg transition ${doctorViewTab === 'tv' ? 'text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`
+    className: `flex-1 min-w-0 py-1.5 px-1 flex flex-col items-center justify-center rounded-xl transition ${doctorViewTab === 'tv' ? 'text-teal-400 font-bold bg-teal-500/10' : 'text-slate-200 hover:text-white hover:bg-slate-800/60 font-semibold'}`
   }, /*#__PURE__*/React.createElement("span", {
-    className: "text-base"
+    className: "text-lg"
   }, "📺"), /*#__PURE__*/React.createElement("span", {
-    className: "text-[9px] mt-0.5 truncate font-medium"
-  }, "TV")), /*#__PURE__*/React.createElement("button", {
+    className: "text-[11px] mt-0.5 whitespace-nowrap font-semibold"
+  }, "TV View")), /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => setShowProfileModal(true),
-    className: "flex-1 min-w-0 py-1 flex flex-col items-center justify-center text-slate-400 hover:text-violet-400 rounded-lg transition"
+    className: "flex-1 min-w-0 py-1.5 px-1 flex flex-col items-center justify-center text-slate-200 hover:text-violet-300 hover:bg-slate-800/60 rounded-xl transition font-semibold"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "text-base"
+    className: "text-lg"
   }, "⚙️"), /*#__PURE__*/React.createElement("span", {
-    className: "text-[9px] mt-0.5 truncate font-medium"
+    className: "text-[11px] mt-0.5 whitespace-nowrap font-semibold"
   }, "Settings"))));
 }
 
@@ -4374,34 +4374,34 @@ function DoctorDashboardView({
     }
   };
   return /*#__PURE__*/React.createElement("div", {
-    className: `p-3 sm:p-4 md:p-6 max-w-7xl mx-auto w-full space-y-4 md:space-y-6 ${compact ? 'text-sm' : ''}`
+    className: `p-3 sm:p-4 md:p-6 max-w-7xl mx-auto w-full max-w-full overflow-x-hidden min-w-0 space-y-4 md:space-y-6 ${compact ? 'text-sm' : ''}`
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm"
+    className: "flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-3.5 shadow-sm min-w-0 w-full overflow-hidden"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center space-x-3"
+    className: "flex flex-wrap items-center gap-2 sm:gap-3 min-w-0"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center space-x-2"
+    className: "flex items-center space-x-2 whitespace-nowrap flex-shrink-0"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-base"
   }, "📊"), /*#__PURE__*/React.createElement("span", {
-    className: "text-xs uppercase font-extrabold text-slate-300 tracking-wider"
+    className: "text-xs uppercase font-extrabold text-slate-300 tracking-wider whitespace-nowrap"
   }, "Queue Analytics"), /*#__PURE__*/React.createElement("span", {
-    className: "inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400",
+    className: "inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 whitespace-nowrap flex-shrink-0",
     title: "Firestore 3-Second Automatic Background Polling & onSnapshot Active"
   }, /*#__PURE__*/React.createElement("span", {
     className: "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
-  }), /*#__PURE__*/React.createElement("span", null, "3s AUTO-REFRESH (LIVE)"))), /*#__PURE__*/React.createElement("span", {
+  }), /*#__PURE__*/React.createElement("span", null, "3s LIVE"))), /*#__PURE__*/React.createElement("span", {
     className: "text-slate-700 hidden sm:inline"
   }, "|"), /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center space-x-2"
+    className: "flex items-center space-x-2 whitespace-nowrap"
   }, /*#__PURE__*/React.createElement("label", {
     htmlFor: "analytics-date-filter",
-    className: "text-xs text-slate-400 font-medium hidden sm:inline"
+    className: "text-xs text-slate-400 font-medium hidden sm:inline whitespace-nowrap"
   }, "Timeframe:"), /*#__PURE__*/React.createElement("select", {
     id: "analytics-date-filter",
     value: dateFilter,
     onChange: e => setDateFilter(e.target.value),
-    className: "bg-slate-950 border border-slate-700 hover:border-teal-500 rounded-xl px-3 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-teal-400 cursor-pointer transition shadow-inner"
+    className: "bg-slate-950 border border-slate-700 hover:border-teal-500 rounded-xl px-2.5 py-1 text-xs font-bold text-white focus:outline-none focus:border-teal-400 cursor-pointer transition shadow-inner"
   }, /*#__PURE__*/React.createElement("option", {
     value: "today"
   }, "📅 Today"), /*#__PURE__*/React.createElement("option", {
@@ -4409,7 +4409,7 @@ function DoctorDashboardView({
   }, "🗓️ 1 Week"), /*#__PURE__*/React.createElement("option", {
     value: "1month"
   }, "📆 1 Month")), /*#__PURE__*/React.createElement("span", {
-    className: "text-[10px] text-teal-400 font-mono px-2 py-0.5 rounded-full bg-teal-500/10 border border-teal-500/20"
+    className: "text-[10px] text-teal-400 font-mono px-2 py-0.5 rounded-full bg-teal-500/10 border border-teal-500/20 whitespace-nowrap flex-shrink-0"
   }, filteredQueue.length, " record(s)"))), /*#__PURE__*/React.createElement("div", {
     className: "hidden sm:flex items-center space-x-2.5"
   }, /*#__PURE__*/React.createElement("button", {
@@ -4441,7 +4441,7 @@ function DoctorDashboardView({
     className: `text-3xl font-extrabold mt-1 font-mono-numbers ${inConsultation ? 'text-teal-400' : 'text-slate-400'}`
   }, inConsultation ? 1 : 0), /*#__PURE__*/React.createElement("p", {
     className: "text-[10px] text-slate-400 mt-1"
-  }, inConsultation ? `Token #${inConsultation.tokenNumber} in room` : 'No patient in room (0 active)')), /*#__PURE__*/React.createElement("div", {
+  }, inConsultation ? `Token ${formatTokenNumber(inConsultation.tokenNumber)} in room` : 'No patient in room (0 active)')), /*#__PURE__*/React.createElement("div", {
     className: "w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/20 hidden sm:flex items-center justify-center text-teal-400 text-xl font-bold"
   }, "🩺")), /*#__PURE__*/React.createElement("div", {
     className: "bg-slate-900 border border-slate-800 rounded-2xl p-4 hidden md:flex items-center justify-between shadow"
@@ -4477,34 +4477,36 @@ function DoctorDashboardView({
   }, "Average duration per individual consultation (0 completed)"))), /*#__PURE__*/React.createElement("div", {
     className: "w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 text-xl font-bold shadow-sm shadow-teal-500/10"
   }, "⏱️"))), /*#__PURE__*/React.createElement("div", {
-    className: "bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center space-x-3"
+    className: "bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 md:p-6 shadow-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 min-w-0 w-full overflow-hidden"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0 flex-1"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center space-x-2 sm:space-x-3 min-w-0"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "w-3 h-3 rounded-full bg-emerald-400 animate-ping"
+    className: "w-3 h-3 rounded-full bg-emerald-400 animate-ping flex-shrink-0"
   }), /*#__PURE__*/React.createElement("h2", {
-    className: "text-base sm:text-xl font-bold text-white truncate max-w-[260px] sm:max-w-none"
+    className: "text-sm sm:text-xl font-bold text-white truncate min-w-0"
   }, doctor.doctorName, ", ", doctor.specialization), /*#__PURE__*/React.createElement("span", {
-    className: "hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-teal-400 border border-slate-700 font-mono"
+    className: "hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-teal-400 border border-slate-700 font-mono whitespace-nowrap flex-shrink-0"
   }, "/q/", effectiveSlug || doctor.clinicSlug)), /*#__PURE__*/React.createElement("p", {
-    className: "text-sm text-slate-400 mt-1"
+    className: "text-xs sm:text-sm text-slate-400 mt-1 truncate min-w-0"
   }, doctor.roomNumber, " • ", doctor.clinicName)), /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-2.5 w-full sm:w-auto"
+    className: "flex items-center gap-2.5 w-full sm:w-auto flex-shrink-0 min-w-0"
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: onCallNext,
-    className: "w-full sm:w-auto px-5 sm:px-7 py-3 sm:py-3.5 bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-black text-sm sm:text-lg rounded-xl sm:rounded-2xl shadow-lg shadow-teal-500/30 transform active:scale-95 transition-all flex items-center justify-center space-x-2.5 cursor-pointer",
+    className: "w-full sm:w-auto px-5 sm:px-7 py-3 sm:py-3.5 bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-black text-sm sm:text-base rounded-xl sm:rounded-2xl shadow-lg shadow-teal-500/30 transform active:scale-95 transition-all flex items-center justify-center space-x-2 cursor-pointer whitespace-nowrap",
     title: "Calls patient, rings phone speaker, and speaks announcement"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "text-xl sm:text-2xl"
-  }, "📢"), /*#__PURE__*/React.createElement("span", null, "1-TAP \"CALL NEXT\"")))), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-1 lg:grid-cols-12 gap-6"
+    className: "text-lg sm:text-xl"
+  }, "📢"), /*#__PURE__*/React.createElement("span", null, "CALL NEXT")))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-1 lg:grid-cols-12 gap-6 min-w-0 w-full"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "lg:col-span-7 space-y-6"
+    className: "lg:col-span-7 space-y-6 min-w-0 w-full overflow-hidden"
   }, inConsultation ? /*#__PURE__*/React.createElement("div", {
     className: "bg-slate-900 border-2 border-teal-500/40 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 md:p-6 shadow-2xl relative overflow-hidden"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "absolute top-0 right-0 bg-teal-500 text-slate-950 font-extrabold px-5 py-1.5 rounded-bl-2xl text-xs uppercase tracking-wider flex items-center space-x-1.5 shadow"
+    className: "absolute top-0 right-0 bg-teal-500 text-slate-950 font-extrabold px-3.5 sm:px-5 py-1 sm:py-1.5 rounded-bl-2xl text-[10px] sm:text-xs uppercase tracking-wider flex items-center space-x-1.5 shadow whitespace-nowrap"
   }, /*#__PURE__*/React.createElement("span", {
     className: "w-2 h-2 rounded-full bg-slate-950 animate-pulse"
   }), /*#__PURE__*/React.createElement("span", null, "ACTIVE IN ", (doctor?.roomNumber || "Consultation Room").toUpperCase())), /*#__PURE__*/React.createElement("div", {
@@ -4512,8 +4514,8 @@ function DoctorDashboardView({
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center space-x-3"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "text-4xl font-black text-teal-400 font-mono-numbers"
-  }, inConsultation.tokenNumber), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    className: "text-3xl sm:text-4xl font-black text-teal-400 font-mono-numbers whitespace-nowrap"
+  }, formatTokenNumber(inConsultation.tokenNumber)), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
     className: "text-2xl font-bold text-white"
   }, inConsultation.patient?.name), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-slate-400"
@@ -4589,10 +4591,11 @@ function DoctorDashboardView({
     title: `Save current prescription as a custom template for Dr. ${doctor.doctorName}`
   }, /*#__PURE__*/React.createElement("span", null, "💾 Save as My Pack"))), /*#__PURE__*/React.createElement("textarea", {
     rows: "4",
+    wrap: "soft",
     value: customRx,
     onChange: e => setCustomRx(e.target.value),
     placeholder: "Select a 1-click template above or type custom prescription / medications...",
-    className: "w-full bg-slate-950 border border-slate-700 rounded-xl sm:rounded-2xl p-2.5 sm:p-3.5 md:p-4 text-xs sm:text-sm font-mono text-slate-200 focus:outline-none focus:border-teal-500 leading-normal sm:leading-relaxed"
+    className: "w-full min-w-0 max-w-full bg-slate-950 border border-slate-700 rounded-xl sm:rounded-2xl p-2.5 sm:p-3.5 md:p-4 text-xs sm:text-sm font-mono text-slate-200 focus:outline-none focus:border-teal-500 leading-normal sm:leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] overflow-y-auto overflow-x-hidden resize-y"
   }), packToast && /*#__PURE__*/React.createElement("div", {
     className: "mt-2.5 p-2.5 bg-emerald-950/80 border border-emerald-500/50 rounded-xl text-xs text-emerald-300 flex items-center space-x-2 animate-fade-in"
   }, /*#__PURE__*/React.createElement("span", null, "✅"), /*#__PURE__*/React.createElement("span", {
@@ -4625,9 +4628,9 @@ function DoctorDashboardView({
     onClick: handleOpenNewPack,
     className: "ml-2 text-teal-400 hover:text-white underline font-semibold cursor-pointer"
   }, "+ Add New Pack")))), /*#__PURE__*/React.createElement("div", {
-    className: "lg:col-span-5 space-y-4"
+    className: "lg:col-span-5 space-y-4 min-w-0 w-full overflow-hidden"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl"
+    className: "bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xl min-w-0 w-full overflow-hidden"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5"
   }, /*#__PURE__*/React.createElement("div", {
@@ -4713,7 +4716,7 @@ function DoctorDashboardView({
       className: "text-[8px] font-black uppercase tracking-wider"
     }, "WAITING"), /*#__PURE__*/React.createElement("span", {
       className: "text-xs font-black font-mono-numbers"
-    }, token.tokenNumber)), /*#__PURE__*/React.createElement("div", {
+    }, formatTokenNumber(token.tokenNumber))), /*#__PURE__*/React.createElement("div", {
       className: "min-w-0"
     }, /*#__PURE__*/React.createElement("div", {
       className: "flex items-center space-x-2"
@@ -4765,7 +4768,7 @@ function DoctorDashboardView({
       className: "text-[8px] font-black uppercase tracking-wider"
     }, isMostRecent ? 'LATEST' : 'DONE'), /*#__PURE__*/React.createElement("span", {
       className: "text-xs font-black font-mono-numbers"
-    }, token.tokenNumber)), /*#__PURE__*/React.createElement("div", {
+    }, formatTokenNumber(token.tokenNumber))), /*#__PURE__*/React.createElement("div", {
       className: "min-w-0"
     }, /*#__PURE__*/React.createElement("div", {
       className: "flex items-center space-x-2"
@@ -5175,7 +5178,7 @@ function MobileLiveQueueView({
       } catch (e) {}
     }
   }, [isInConsultation, hasNotifiedTurn]);
-  const tokenDisplay = myToken?.tokenNumber || (queryToken ? `#${queryToken}` : '#--');
+  const tokenDisplay = myToken?.tokenNumber ? formatTokenNumber(myToken.tokenNumber) : queryToken ? formatTokenNumber(queryToken) : '#--';
   const cleanTokenNum = String(tokenDisplay).replace('#', '');
   const persistentUrl = typeof window !== 'undefined' ? `${window.location.origin}/queue/${doctor.clinicSlug}?token=${cleanTokenNum}` : '';
   const handleShareToken = () => {
@@ -5415,7 +5418,7 @@ function PublicPatientCheckinView({
     className: `py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center space-x-1.5 ${activeTab === 'track' ? 'bg-teal-500 text-slate-950 font-black shadow-md' : 'text-slate-400 hover:text-white'}`
   }, /*#__PURE__*/React.createElement("span", null, "🎫 Track Token"), myToken && /*#__PURE__*/React.createElement("span", {
     className: `text-[10px] px-1.5 py-0.5 rounded-md font-mono ${activeTab === 'track' ? 'bg-slate-950 text-teal-400 font-bold' : 'bg-slate-800 text-teal-300'}`
-  }, "#", myToken.tokenNumber)), /*#__PURE__*/React.createElement("button", {
+  }, formatTokenNumber(myToken.tokenNumber))), /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: handleNewCheckinClick,
     className: `py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center space-x-1.5 ${activeTab === 'new' ? 'bg-teal-500 text-slate-950 font-black shadow-md' : 'text-slate-400 hover:text-white'}`
