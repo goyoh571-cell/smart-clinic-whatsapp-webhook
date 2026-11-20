@@ -1353,33 +1353,78 @@
     // ========================================================================
     function App() {
       const [serverUrl] = useState(() => (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'));
-      // 1. Independent Clinic & Super Admin URL Route Resolver (Domain Separated)
+      // 1. Independent Clinic & Super Admin URL Route Resolver (Strict Hostname-Enforced)
       const parseLocationRoute = useCallback(() => {
         const path = window.location.pathname || '';
         const hash = window.location.hash || '';
         const hostname = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase();
 
         const isSuperAdminHost = hostname.startsWith('superadmin.') || hostname.includes('superadmin');
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('10.') || hostname.startsWith('192.168.') || hostname === '';
 
         let isSuperAdminStored = false;
         try {
           isSuperAdminStored = localStorage.getItem('goyoh_super_admin_authed') === 'true';
         } catch (e) {}
 
-        // 0. Dedicated Super Admin Host (e.g., superadmin.goyoh.in)
+        // ====================================================================
+        // RULE 1: STRICT HOSTNAME ENFORCEMENT ON superadmin.goyoh.in
+        // - Root / automatically routes to /super-admin/login (or /super-admin if authenticated)
+        // - All clinic/doctor portal routes are strictly blocked on superadmin.goyoh.in
+        // ====================================================================
         if (isSuperAdminHost) {
+          // Explicit login page
           if (path === '/super-admin/login' || hash === '#/super-admin/login') {
             return { mode: 'super_admin_login', slug: null };
           }
+          // Explicit dashboard access
           if (path === '/super-admin' || path === '/admin' || hash === '#/super-admin' || hash === '#/admin') {
-            return isSuperAdminStored ? { mode: 'super_admin', slug: null } : { mode: 'super_admin_login', slug: null };
+            if (!isSuperAdminStored) {
+              try {
+                if (window.history && window.history.replaceState) {
+                  window.history.replaceState({}, '', '/super-admin/login');
+                }
+              } catch (e) {}
+              return { mode: 'super_admin_login', slug: null };
+            }
+            return { mode: 'super_admin', slug: null };
           }
-          if (path === '/' || hash === '#' || hash === '' || path === '/login') {
-            return isSuperAdminStored ? { mode: 'super_admin', slug: null } : { mode: 'super_admin_login', slug: null };
-          }
+
+          // Root /, /login, or ANY clinic/doctor portal route visited on superadmin.goyoh.in:
+          // Strictly block clinic routes and route automatically to /super-admin (if authed) or /super-admin/login (if unauthed)
+          const targetSuperPath = isSuperAdminStored ? '/super-admin' : '/super-admin/login';
+          const targetSuperMode = isSuperAdminStored ? 'super_admin' : 'super_admin_login';
+          try {
+            if (window.history && window.history.replaceState) {
+              window.history.replaceState({}, '', targetSuperPath);
+            }
+          } catch (e) {}
+          return { mode: targetSuperMode, slug: null };
         }
 
-        // Standard explicit routes (e.g., admin.goyoh.in)
+        // ====================================================================
+        // RULE 2: STRICT HOSTNAME ENFORCEMENT ON admin.goyoh.in (Clinic Host)
+        // - Allow /super-admin routes exclusively on superadmin.goyoh.in (and localhost)
+        // - Redirect ANY /super-admin access on admin.goyoh.in to /
+        // ====================================================================
+        const isSuperAdminPath = 
+          path === '/super-admin' || path.startsWith('/super-admin/') ||
+          hash === '#/super-admin' || hash.startsWith('#/super-admin/') ||
+          path === '/admin' || path.startsWith('/admin/') ||
+          hash === '#/admin' || hash.startsWith('#/admin/');
+
+        if (!isSuperAdminHost && !isLocalhost && isSuperAdminPath) {
+          try {
+            if (window.history && window.history.replaceState) {
+              window.history.replaceState({}, '', '/');
+            }
+          } catch (e) {}
+          return { mode: 'clinic_login', slug: null };
+        }
+
+        // ====================================================================
+        // RULE 3: LOCAL TESTING (localhost) & STANDARD CLINIC ROUTES
+        // ====================================================================
         if (path === '/super-admin/login' || hash === '#/super-admin/login') {
           return { mode: 'super_admin_login', slug: null };
         }
@@ -3009,8 +3054,23 @@
       // CONDITIONAL RENDERING: SUPER ADMIN DASHBOARD (/super-admin or /admin)
       // ======================================================================
       if (currentRoute.mode === 'super_admin') {
+        const hostname = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase();
+        const isSuperAdminHost = hostname.startsWith('superadmin.') || hostname.includes('superadmin');
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('10.') || hostname.startsWith('192.168.') || hostname === '';
+
+        // Strict Hostname Enforcement: /super-admin is exclusive to superadmin.goyoh.in and localhost
+        if (!isSuperAdminHost && !isLocalhost) {
+          try {
+            if (window.history && window.history.replaceState) {
+              window.history.replaceState({}, '', '/');
+            }
+          } catch (e) {}
+          setTimeout(() => navigateTo('/'), 0);
+          return null;
+        }
+
         if (!isSuperAdminAuthed) {
-          // Strictly block any clinic session or unauthenticated user and redirect to super admin login
+          // Strictly block unauthenticated user and redirect to super admin login
           setTimeout(() => navigateTo('/super-admin/login'), 0);
           return (
             <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
@@ -3053,9 +3113,7 @@
                 localStorage.removeItem('goyoh_super_admin_email');
                 localStorage.removeItem('goyoh_super_admin_uid');
               } catch(e){}
-              const isSuperAdminHost = typeof window !== 'undefined' && 
-                (window.location.hostname.toLowerCase().startsWith('superadmin.') || window.location.hostname.toLowerCase().includes('superadmin'));
-              navigateTo(isSuperAdminHost ? '/' : '/super-admin/login');
+              navigateTo('/super-admin/login');
             }}
           />
         );
@@ -3065,6 +3123,21 @@
       // CONDITIONAL RENDERING: SUPER ADMIN LOGIN (/super-admin/login)
       // ======================================================================
       if (currentRoute.mode === 'super_admin_login') {
+        const hostname = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase();
+        const isSuperAdminHost = hostname.startsWith('superadmin.') || hostname.includes('superadmin');
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('10.') || hostname.startsWith('192.168.') || hostname === '';
+
+        // Strict Hostname Enforcement: /super-admin/login is exclusive to superadmin.goyoh.in and localhost
+        if (!isSuperAdminHost && !isLocalhost) {
+          try {
+            if (window.history && window.history.replaceState) {
+              window.history.replaceState({}, '', '/');
+            }
+          } catch (e) {}
+          setTimeout(() => navigateTo('/'), 0);
+          return null;
+        }
+
         return (
           <SuperAdminLoginView
             clinics={clinicsList}
@@ -3077,6 +3150,22 @@
             onNavigateTo={navigateTo}
           />
         );
+      }
+
+      // ======================================================================
+      // STRICT HOSTNAME ENFORCEMENT: BLOCK CLINIC ROUTES ON superadmin.goyoh.in
+      // ======================================================================
+      const currentHost = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase();
+      const isCurrentSuperHost = currentHost.startsWith('superadmin.') || currentHost.includes('superadmin');
+      if (isCurrentSuperHost && currentRoute.mode !== 'super_admin' && currentRoute.mode !== 'super_admin_login') {
+        const target = isSuperAdminAuthed ? '/super-admin' : '/super-admin/login';
+        try {
+          if (window.history && window.history.replaceState) {
+            window.history.replaceState({}, '', target);
+          }
+        } catch (e) {}
+        setTimeout(() => navigateTo(target), 0);
+        return null;
       }
 
       // ======================================================================
