@@ -640,6 +640,61 @@ app.post(['/notifications/prescription-dispatch', '/api/notifications/prescripti
   }
 });
 
+
+// ----------------------------------------------------------------------------
+// SUPER ADMIN AUTHENTICATION API (Firebase Auth Verified)
+// ----------------------------------------------------------------------------
+app.post(['/api/super-admin/login', '/super-admin/login'], async (req, res) => {
+  try {
+    const { email, username, identifier, password } = req.body || {};
+    const cleanUser = (identifier || email || username || '').trim().toLowerCase();
+    const cleanPass = (password || '').trim();
+
+    if (!cleanUser || !cleanPass) {
+      return res.status(400).json({ error: 'Please enter both username/email and password.' });
+    }
+
+    const authEmail = cleanUser.includes('@') ? cleanUser : `${cleanUser}@goyoh.com`;
+    const fbUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
+
+    const fbRes = await fetch(fbUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: authEmail,
+        password: cleanPass,
+        returnSecureToken: true
+      })
+    });
+
+    if (!fbRes.ok) {
+      return res.status(401).json({ success: false, error: 'Invalid Super Admin credentials. Access denied.' });
+    }
+
+    const fbData = await fbRes.json();
+    const uid = fbData.localId;
+    const isMasterUid = (uid === 'fsRZdQJZObTG7FGEiAF2HnM4VUu1');
+    const isMasterEmail = (authEmail === 'superadmin@goyoh.com' || authEmail === 'admin@goyoh.in');
+
+    if (!isMasterUid && !isMasterEmail) {
+      return res.status(403).json({ success: false, error: 'Access Denied: This account is not authorized as a Super Admin.' });
+    }
+
+    return res.json({
+      success: true,
+      token: fbData.idToken,
+      admin: {
+        uid: uid,
+        email: authEmail,
+        name: 'GOYOH Super Admin',
+        role: 'super_admin'
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: `Authentication service error: ${error.message}` });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`==================================================`);

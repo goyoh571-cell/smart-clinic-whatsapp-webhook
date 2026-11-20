@@ -750,24 +750,64 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
             print(f"[CLIENT LOG] Frontend error: {data.get('message')} at {data.get('url')} ({data.get('filename')}:{data.get('lineno')})")
             return self.send_json(200, {"success": True})
 
-        # API: Super Admin Login
+        # API: Super Admin Login (Firebase Auth Verified)
         if clean_path == '/api/super-admin/login':
             identifier = (data.get('identifier') or data.get('email') or data.get('username') or '').strip().lower()
             password = (data.get('password') or '').strip()
 
-            is_master = identifier in ['superadmin@goyoh.com', 'superadmin', 'admin', 'goyoh_owner']
-            if is_master and password == 'admin123':
-                return self.send_json(200, {
-                    "success": True,
-                    "token": "master_jwt_token_super_admin",
-                    "admin": {
-                        "email": "superadmin@goyoh.com",
-                        "username": "superadmin",
-                        "name": "GOYOH Super Admin",
-                        "role": "super_admin"
-                    }
-                })
-            return self.send_json(401, {"error": "Invalid Super Admin credentials. Access denied."})
+            if not identifier or not password:
+                return self.send_json(400, {"error": "Please enter both username/email and password."})
+
+            # Check if identifier matches any clinic or doctor in memory
+            is_clinic_staff = any(
+                (c.get('email', '').strip().lower() == identifier or
+                 c.get('slug', '').strip().lower() == identifier or
+                 c.get('clinicId', '').strip().lower() == identifier)
+                for c in MEMORY_CLINICS
+            ) or any(
+                d.get('email', '').strip().lower() == identifier
+                for d in MEMORY_DOCTORS
+            )
+
+            if is_clinic_staff:
+                return self.send_json(403, {"error": "Access Denied: Clinic staff credentials cannot be used to access the Super Admin Portal."})
+
+            auth_email = identifier if '@' in identifier else f"{identifier}@goyoh.com"
+            api_key = os.environ.get('FIREBASE_API_KEY', 'AIzaSyD_0K24tUnG1OWh74HwJfjqQIZ6Q3_IOn0')
+
+            try:
+                fb_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}"
+                fb_req = urllib.request.Request(
+                    fb_url,
+                    data=json.dumps({"email": auth_email, "password": password, "returnSecureToken": True}).encode('utf-8'),
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(fb_req, timeout=6) as fb_resp:
+                    fb_data = json.loads(fb_resp.read().decode('utf-8'))
+                    local_id = fb_data.get('localId')
+                    id_token = fb_data.get('idToken')
+
+                    is_master_uid = (local_id == 'fsRZdQJZObTG7FGEiAF2HnM4VUu1')
+                    is_master_email = (auth_email in ['superadmin@goyoh.com', 'admin@goyoh.in'])
+
+                    if is_master_uid or is_master_email:
+                        return self.send_json(200, {
+                            "success": True,
+                            "token": id_token,
+                            "admin": {
+                                "uid": local_id,
+                                "email": auth_email,
+                                "name": "GOYOH Super Admin",
+                                "role": "super_admin"
+                            }
+                        })
+                    else:
+                        return self.send_json(403, {"error": "Access Denied: This account is not authorized as a Super Admin."})
+            except urllib.error.HTTPError as e:
+                return self.send_json(401, {"error": "Invalid Super Admin credentials. Access denied."})
+            except Exception as e:
+                return self.send_json(500, {"error": f"Authentication service error: {str(e)}"})
 
         # API: Unified Single Login (Credential-Based Tenant Routing)
         if clean_path == '/api/auth/login':
@@ -777,20 +817,7 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
             if not identifier or not password:
                 return self.send_json(400, {"error": "Please enter both username/email and password."})
 
-            # Check Super Admin Master Account
-            is_master = identifier in ['superadmin@goyoh.com', 'superadmin', 'admin', 'goyoh_owner']
-            if is_master and password in ['admin123', 'clinic123']:
-                return self.send_json(200, {
-                    "success": True,
-                    "role": "super_admin",
-                    "redirectUrl": "/super-admin",
-                    "admin": {
-                        "email": "superadmin@goyoh.com",
-                        "username": "superadmin",
-                        "name": "GOYOH Super Admin",
-                        "role": "super_admin"
-                    }
-                })
+            # Clinic credentials check only
 
             clean_token = re.sub(r'[^a-z0-9]', '', identifier)
 

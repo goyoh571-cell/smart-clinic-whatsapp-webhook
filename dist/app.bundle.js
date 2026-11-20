@@ -1230,10 +1230,46 @@ function QRCodeCanvas({
 // ========================================================================
 function App() {
   const [serverUrl] = useState(() => typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
-  // 1. Independent Clinic URL Route Resolver
+  // 1. Independent Clinic & Super Admin URL Route Resolver (Domain Separated)
   const parseLocationRoute = useCallback(() => {
     const path = window.location.pathname || '';
     const hash = window.location.hash || '';
+    const hostname = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase();
+    const isSuperAdminHost = hostname.startsWith('superadmin.') || hostname.includes('superadmin');
+    let isSuperAdminStored = false;
+    try {
+      isSuperAdminStored = localStorage.getItem('goyoh_super_admin_authed') === 'true';
+    } catch (e) {}
+
+    // 0. Dedicated Super Admin Host (e.g., superadmin.goyoh.in)
+    if (isSuperAdminHost) {
+      if (path === '/super-admin/login' || hash === '#/super-admin/login') {
+        return {
+          mode: 'super_admin_login',
+          slug: null
+        };
+      }
+      if (path === '/super-admin' || path === '/admin' || hash === '#/super-admin' || hash === '#/admin') {
+        return isSuperAdminStored ? {
+          mode: 'super_admin',
+          slug: null
+        } : {
+          mode: 'super_admin_login',
+          slug: null
+        };
+      }
+      if (path === '/' || hash === '#' || hash === '' || path === '/login') {
+        return isSuperAdminStored ? {
+          mode: 'super_admin',
+          slug: null
+        } : {
+          mode: 'super_admin_login',
+          slug: null
+        };
+      }
+    }
+
+    // Standard explicit routes (e.g., admin.goyoh.in)
     if (path === '/super-admin/login' || hash === '#/super-admin/login') {
       return {
         mode: 'super_admin_login',
@@ -2912,8 +2948,8 @@ function App() {
   // ======================================================================
   if (currentRoute.mode === 'super_admin') {
     if (!isSuperAdminAuthed) {
-      // Strictly block any clinic session or unauthenticated user and redirect to login
-      setTimeout(() => navigateTo('/login'), 0);
+      // Strictly block any clinic session or unauthenticated user and redirect to super admin login
+      setTimeout(() => navigateTo('/super-admin/login'), 0);
       return /*#__PURE__*/React.createElement("div", {
         className: "min-h-screen bg-slate-950 text-white flex items-center justify-center p-4"
       }, /*#__PURE__*/React.createElement("div", {
@@ -2924,10 +2960,10 @@ function App() {
         className: "text-xl font-black text-white"
       }, "Access Restricted"), /*#__PURE__*/React.createElement("p", {
         className: "text-xs text-slate-400 leading-relaxed"
-      }, "Super Admin controls are restricted. Redirecting to login..."), /*#__PURE__*/React.createElement("button", {
-        onClick: () => navigateTo('/login'),
-        className: "w-full py-2.5 bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg cursor-pointer"
-      }, "Go to Login")));
+      }, "Super Admin controls are restricted. Redirecting to Super Admin Authentication..."), /*#__PURE__*/React.createElement("button", {
+        onClick: () => navigateTo('/super-admin/login'),
+        className: "w-full py-2.5 bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg cursor-pointer"
+      }, "Authenticate as Super Admin")));
     }
     return /*#__PURE__*/React.createElement(SuperAdminDashboardView, {
       clinics: clinicsList,
@@ -2947,8 +2983,12 @@ function App() {
         setIsSuperAdminAuthed(false);
         try {
           localStorage.removeItem('goyoh_super_admin_authed');
+          localStorage.removeItem('goyoh_super_admin_token');
+          localStorage.removeItem('goyoh_super_admin_email');
+          localStorage.removeItem('goyoh_super_admin_uid');
         } catch (e) {}
-        navigateTo('/login');
+        const isSuperAdminHost = typeof window !== 'undefined' && (window.location.hostname.toLowerCase().startsWith('superadmin.') || window.location.hostname.toLowerCase().includes('superadmin'));
+        navigateTo(isSuperAdminHost ? '/' : '/super-admin/login');
       }
     });
   }
@@ -2958,6 +2998,8 @@ function App() {
   // ======================================================================
   if (currentRoute.mode === 'super_admin_login') {
     return /*#__PURE__*/React.createElement(SuperAdminLoginView, {
+      clinics: clinicsList,
+      doctors: doctorsList,
       onLoginSuccess: () => {
         setIsSuperAdminAuthed(true);
         try {
@@ -7303,6 +7345,8 @@ function SuperAdminDashboardView({
 // 9B. VIEW: GOYOH HEALTH CONNECT - SUPER ADMIN PORTAL LOGIN (/super-admin/login)
 // ========================================================================
 function SuperAdminLoginView({
+  clinics = [],
+  doctors = [],
   onLoginSuccess,
   onNavigateTo
 }) {
@@ -7310,37 +7354,148 @@ function SuperAdminLoginView({
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const handleMasterSubmit = e => {
+  const isSuperAdminHost = typeof window !== 'undefined' && (window.location.hostname.toLowerCase().startsWith('superadmin.') || window.location.hostname.toLowerCase().includes('superadmin'));
+  const handleMasterSubmit = async e => {
     e.preventDefault();
     setErrorMsg('');
-    const cleanUser = username.trim().toLowerCase();
+    const cleanUser = username.trim();
     const cleanPass = password.trim();
     if (!cleanUser || !cleanPass) {
       setErrorMsg('Please enter both master username/email and password.');
       return;
     }
     setIsSubmitting(true);
-    const isMasterUser = cleanUser === 'superadmin@goyoh.com' || cleanUser === 'superadmin' || cleanUser === 'admin' || cleanUser === 'goyoh_owner';
-    const isMasterPass = cleanPass === 'admin123';
-    if (isMasterUser && isMasterPass) {
+    const lowerUser = cleanUser.toLowerCase();
+
+    // 1. Strictly block clinic staff credentials from accessing Super Admin
+    const isClinicStaff = (clinics || []).some(c => c.email && c.email.toLowerCase() === lowerUser || c.clinicId && c.clinicId.toLowerCase() === lowerUser || c.username && c.username.toLowerCase() === lowerUser || c.slug && c.slug.toLowerCase() === lowerUser) || (doctors || []).some(d => d.email && d.email.toLowerCase() === lowerUser || d.username && d.username.toLowerCase() === lowerUser);
+    if (isClinicStaff) {
       setIsSubmitting(false);
-      onLoginSuccess({
-        email: 'superadmin@goyoh.com',
-        username: 'superadmin',
-        role: 'super_admin'
-      });
-    } else {
-      setIsSubmitting(false);
-      setErrorMsg('Invalid Super Admin credentials. Access denied.');
+      setErrorMsg('Access Denied: Clinic staff credentials cannot be used to access the Super Admin Portal.');
+      return;
     }
-  };
-  const handleQuickMasterLogin = () => {
-    setErrorMsg('');
-    onLoginSuccess({
-      email: 'superadmin@goyoh.com',
-      username: 'superadmin',
-      role: 'super_admin'
-    });
+
+    // 2. Real Authentication via Firebase Auth / Backend Role Verification
+    try {
+      const authEmail = cleanUser.includes('@') ? cleanUser.toLowerCase() : `${cleanUser.toLowerCase()}@goyoh.com`;
+      const apiKey = typeof window !== 'undefined' && window.SmartClinicFirebase?.firebaseConfig?.apiKey || "AIzaSyD_0K24tUnG1OWh74HwJfjqQIZ6Q3_IOn0";
+      let authSuccess = false;
+      let authUid = null;
+      let idToken = null;
+
+      // Attempt backend role verification endpoint if reachable
+      try {
+        const apiRes = await fetch('/api/super-admin/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: authEmail,
+            username: cleanUser,
+            password: cleanPass
+          })
+        });
+        if (apiRes.ok) {
+          const apiData = await apiRes.json();
+          if (apiData.success) {
+            authSuccess = true;
+            authUid = apiData.admin?.uid || 'fsRZdQJZObTG7FGEiAF2HnM4VUu1';
+            idToken = apiData.token || null;
+          }
+        }
+      } catch (apiErr) {
+        // Fallback to direct client-side Firebase Auth REST
+      }
+
+      // Direct Firebase Auth verification
+      if (!authSuccess) {
+        const fbAuthRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: authEmail,
+            password: cleanPass,
+            returnSecureToken: true
+          })
+        });
+        if (fbAuthRes.ok) {
+          const fbData = await fbAuthRes.json();
+          authUid = fbData.localId;
+          idToken = fbData.idToken;
+
+          // Also sync with Firebase compat auth if loaded
+          if (typeof window !== 'undefined' && window.SmartClinicFirebase?.auth) {
+            try {
+              await window.SmartClinicFirebase.auth.signInWithEmailAndPassword(authEmail, cleanPass);
+            } catch (e) {}
+          }
+
+          // Verify Super Admin Authorization (UID, email, or Firestore check)
+          const isMasterEmail = authEmail === 'superadmin@goyoh.com' || authEmail === 'admin@goyoh.in';
+          const isMasterUid = authUid === 'fsRZdQJZObTG7FGEiAF2HnM4VUu1';
+          let isAuthorizedAdmin = isMasterEmail || isMasterUid;
+
+          // Check Firestore admins collection if not already confirmed
+          if (!isAuthorizedAdmin && typeof window !== 'undefined' && window.SmartClinicFirebase?.db) {
+            try {
+              const db = window.SmartClinicFirebase.db;
+              const adminDoc = await db.collection('admins').doc(authUid).get();
+              if (adminDoc.exists && adminDoc.data()?.role === 'super_admin') {
+                isAuthorizedAdmin = true;
+              }
+            } catch (dbErr) {
+              console.warn('[Admin Verification Notice]:', dbErr);
+            }
+          }
+          if (isAuthorizedAdmin) {
+            authSuccess = true;
+          } else {
+            setIsSubmitting(false);
+            setErrorMsg('Access Denied: This account is not authorized for Super Admin master controls.');
+            return;
+          }
+        } else {
+          const errData = await fbAuthRes.json().catch(() => ({}));
+          const errCode = errData.error?.message || '';
+          setIsSubmitting(false);
+          if (errCode.includes('INVALID_LOGIN_CREDENTIALS') || errCode.includes('INVALID_PASSWORD') || errCode.includes('EMAIL_NOT_FOUND')) {
+            setErrorMsg('Invalid Super Admin credentials. Access denied.');
+          } else if (errCode.includes('USER_DISABLED')) {
+            setErrorMsg('This Super Admin account has been disabled. Contact system administrator.');
+          } else {
+            setErrorMsg('Authentication failed. Please verify your master credentials.');
+          }
+          return;
+        }
+      }
+      if (authSuccess) {
+        setIsSubmitting(false);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('goyoh_super_admin_authed', 'true');
+            if (idToken) localStorage.setItem('goyoh_super_admin_token', idToken);
+            localStorage.setItem('goyoh_super_admin_email', authEmail);
+            if (authUid) localStorage.setItem('goyoh_super_admin_uid', authUid);
+            localStorage.removeItem('smart_clinic_authed');
+          } catch (e) {}
+        }
+        onLoginSuccess({
+          email: authEmail,
+          username: cleanUser,
+          role: 'super_admin',
+          uid: authUid
+        });
+      } else {
+        setIsSubmitting(false);
+        setErrorMsg('Invalid Super Admin credentials. Access denied.');
+      }
+    } catch (err) {
+      setIsSubmitting(false);
+      setErrorMsg('Authentication service unavailable. Please check your network connection.');
+    }
   };
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-6 font-sans relative overflow-hidden"
@@ -7354,9 +7509,13 @@ function SuperAdminLoginView({
     className: "w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 via-teal-400 to-emerald-400 flex items-center justify-center font-black text-slate-950 text-xl shadow-lg shadow-teal-500/20"
   }, "G"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
     className: "font-extrabold text-base tracking-tight text-white"
-  }, "GOYOH Health Connect"), /*#__PURE__*/React.createElement("p", {
+  }, "GOYOH Super Admin Console"), /*#__PURE__*/React.createElement("p", {
     className: "text-[11px] text-cyan-400 font-semibold"
-  }, "Master Platform Operations"))), /*#__PURE__*/React.createElement("button", {
+  }, "Master Operations & Multi-Tenant Management"))), isSuperAdminHost ? /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center space-x-2 text-xs text-cyan-400 bg-slate-900/90 border border-cyan-500/30 px-3 py-1.5 rounded-xl font-mono"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "w-2 h-2 rounded-full bg-cyan-400 animate-pulse"
+  }), /*#__PURE__*/React.createElement("span", null, "superadmin.goyoh.in")) : /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => onNavigateTo && onNavigateTo('/login'),
     className: "px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-xs font-bold text-slate-300 rounded-xl border border-slate-700 transition cursor-pointer flex items-center space-x-1.5"
@@ -7386,7 +7545,7 @@ function SuperAdminLoginView({
     required: true,
     value: username,
     onChange: e => setUsername(e.target.value),
-    placeholder: "superadmin@goyoh.com or superadmin",
+    placeholder: "Enter Master Username or Admin Email",
     className: "w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-medium"
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "text-xs font-bold text-slate-300 block mb-1"
@@ -7395,27 +7554,13 @@ function SuperAdminLoginView({
     required: true,
     value: password,
     onChange: e => setPassword(e.target.value),
-    placeholder: "••••••••",
+    placeholder: "••••••••••••",
     className: "w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-medium"
   })), /*#__PURE__*/React.createElement("button", {
     type: "submit",
     disabled: isSubmitting,
-    className: "w-full py-3 bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition cursor-pointer shadow-lg shadow-cyan-500/20"
-  }, isSubmitting ? 'Verifying Master Credentials...' : 'Authenticate Master Session →')), /*#__PURE__*/React.createElement("div", {
-    className: "pt-4 border-t border-slate-800 space-y-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider block text-center"
-  }, "⚡ Platform Owner Testing Access:"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    onClick: handleQuickMasterLogin,
-    className: "w-full p-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 rounded-xl text-left transition cursor-pointer flex items-center justify-between group"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-bold text-white group-hover:text-cyan-300 transition"
-  }, "1-Click Master Access"), /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] text-slate-400"
-  }, "superadmin@goyoh.com • admin123")), /*#__PURE__*/React.createElement("span", {
-    className: "text-[11px] font-mono text-cyan-400 font-bold bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800"
-  }, "Enter Control Center →"))), /*#__PURE__*/React.createElement("div", {
+    className: "w-full py-3 bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition cursor-pointer shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+  }, isSubmitting ? 'Verifying Master Credentials...' : 'Authenticate Master Session →')), !isSuperAdminHost && /*#__PURE__*/React.createElement("div", {
     className: "text-center pt-2"
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
@@ -7651,16 +7796,8 @@ function UnifiedLoginView({
       setIsSubmitting(false);
       const lowerUser = cleanUser.toLowerCase();
 
-      // Direct Super Admin login support
-      const isMaster = (lowerUser === 'superadmin' || lowerUser === 'admin' || lowerUser === 'superadmin@goyoh.com') && cleanPass === 'admin123';
-      if (isMaster) {
-        if (onSuperAdminSuccess) {
-          onSuperAdminSuccess();
-        } else {
-          onNavigateTo('/super-admin');
-        }
-        return;
-      }
+      // Clinic provider login only (Super Admin isolated to dedicated portal)
+
       const matchedClinic = clinics.find(c => c.email.toLowerCase() === lowerUser || c.clinicId.toLowerCase() === lowerUser || c.username && c.username.toLowerCase() === lowerUser || c.slug.toLowerCase() === lowerUser || c.name.toLowerCase() === lowerUser);
       if (matchedClinic) {
         const subStatus = checkClinicSubscriptionStatus(matchedClinic);
@@ -7688,14 +7825,13 @@ function UnifiedLoginView({
     className: "font-extrabold text-base tracking-tight text-white"
   }, "GOYOH Health Connect"), /*#__PURE__*/React.createElement("p", {
     className: "text-[11px] text-teal-400 font-semibold"
-  }, "Unified Healthcare OS"))), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    onClick: () => onNavigateTo('/super-admin/login'),
-    className: "text-xs font-semibold text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-teal-500/50 px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 cursor-pointer shadow-sm",
-    title: "Switch to Super Admin Portal"
-  }, /*#__PURE__*/React.createElement("span", null, "🛡️ Super Admin"), /*#__PURE__*/React.createElement("span", {
-    className: "text-teal-400 font-bold"
-  }, "→"))), /*#__PURE__*/React.createElement("main", {
+  }, "Clinic & Doctor Portal"))), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center space-x-2 text-xs text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "w-2 h-2 rounded-full bg-emerald-400 animate-pulse"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "font-medium text-slate-300"
+  }, "System Online"))), /*#__PURE__*/React.createElement("main", {
     className: "flex-1 flex items-center justify-center py-8"
   }, /*#__PURE__*/React.createElement("div", {
     className: "max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6"
