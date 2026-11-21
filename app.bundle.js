@@ -3462,20 +3462,20 @@ function App() {
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen flex flex-col bg-slate-950 text-slate-100 pb-20 md:pb-6 overflow-x-hidden"
   }, /*#__PURE__*/React.createElement("header", {
-    className: "border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-50 px-3 sm:px-4 py-2 sm:py-3 w-full"
+    className: "border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-50 px-3 sm:px-4 py-2 sm:py-2.5 w-full"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "max-w-7xl mx-auto w-full flex items-center justify-between gap-2 sm:gap-4"
+    className: "max-w-7xl mx-auto w-full flex items-center justify-between gap-3 sm:gap-4 min-w-0"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1"
+    className: "flex items-center space-x-2.5 sm:space-x-3 flex-shrink-0 min-w-0"
   }, /*#__PURE__*/React.createElement("div", {
     className: "w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-400 flex items-center justify-center shadow-md shadow-teal-500/20 text-slate-950 font-black text-base sm:text-lg flex-shrink-0"
   }, "+"), !canManageDoctors ?
   /*#__PURE__*/
   /* Single-Doctor / Starter Clinic Clean Header: Minimal & Professional */
   React.createElement("div", {
-    className: "flex items-center space-x-2 sm:space-x-2.5 min-w-0"
+    className: "flex items-center space-x-2 sm:space-x-2.5 min-w-0 flex-shrink-0"
   }, /*#__PURE__*/React.createElement("h1", {
-    className: "font-black text-sm sm:text-lg tracking-tight text-white truncate max-w-[150px] xs:max-w-[200px] sm:max-w-[320px] md:max-w-none"
+    className: "font-black text-sm sm:text-base tracking-tight text-white whitespace-nowrap"
   }, activeDoctor?.clinicName || 'Clinic'), /*#__PURE__*/React.createElement("span", {
     className: "inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] sm:text-xs font-bold text-emerald-400 shadow-sm flex-shrink-0 whitespace-nowrap"
   }, /*#__PURE__*/React.createElement("span", {
@@ -3484,57 +3484,39 @@ function App() {
   /*#__PURE__*/
   /* Multi-Doctor Clinics: Identity with Doctor Management */
   React.createElement("div", {
-    className: "min-w-0 flex-1"
+    className: "min-w-0 flex-shrink-0"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center space-x-2 min-w-0"
   }, /*#__PURE__*/React.createElement("h1", {
-    className: "font-extrabold text-xs sm:text-lg tracking-tight text-white truncate max-w-[130px] xs:max-w-[170px] sm:max-w-[260px] md:max-w-none min-w-0"
+    className: "font-extrabold text-sm sm:text-base tracking-tight text-white whitespace-nowrap"
   }, activeDoctor?.clinicName || 'Clinic'), /*#__PURE__*/React.createElement("span", {
     className: "inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400 whitespace-nowrap flex-shrink-0"
   }, /*#__PURE__*/React.createElement("span", {
     className: "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
-  }), /*#__PURE__*/React.createElement("span", null, "ACTIVE OPD")), /*#__PURE__*/React.createElement("span", {
-    className: "hidden lg:inline-block px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/30",
-    title: "Independent Clinic Dashboard Route"
-  }, "/clinic/", activeDoctorClinic ? activeDoctorClinic.slug : activeDoctor?.clinicSlug || 'dashboard', "/dashboard")), /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center space-x-1.5 sm:space-x-2 text-[11px] sm:text-xs text-slate-400 truncate"
+  }), /*#__PURE__*/React.createElement("span", null, "ACTIVE OPD"))), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center space-x-1.5 text-[11px] sm:text-xs text-slate-400 truncate"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-teal-400 font-semibold truncate"
   }, activeDoctor?.doctorName), /*#__PURE__*/React.createElement("span", null, "•"), /*#__PURE__*/React.createElement("span", {
     className: "truncate"
-  }, activeDoctor?.roomNumber), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setDoctorModalTab('list');
-      setShowAuthModal(true);
-    },
-    className: "hidden sm:inline-flex text-indigo-400 hover:text-indigo-300 font-semibold underline ml-1 cursor-pointer",
-    title: "Manage in-clinic doctors and consultation desks"
-  }, "Manage Doctors (", clinicDoctors.length, ")"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setDoctorModalTab('add');
-      setShowAuthModal(true);
-    },
-    className: "hidden sm:inline-flex text-emerald-400 hover:text-emerald-300 font-bold underline ml-1 cursor-pointer",
-    title: "Add a new doctor to this clinic"
-  }, "+ Add Doctor")))), /*#__PURE__*/React.createElement("div", {
-    className: "hidden md:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs sm:text-sm font-medium"
+  }, activeDoctor?.roomNumber)))), /*#__PURE__*/React.createElement("div", {
+    className: "hidden md:flex items-center space-x-1.5 lg:space-x-2 text-xs flex-shrink-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-medium"
   }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
     onClick: () => setDoctorViewTab('doctor'),
-    className: `flex items-center space-x-2 px-3 py-1.5 rounded-lg transition ${doctorViewTab === 'doctor' ? 'bg-teal-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`
+    className: `flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg transition whitespace-nowrap ${doctorViewTab === 'doctor' ? 'bg-teal-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`,
+    title: "View Doctor Consultation Console"
   }, /*#__PURE__*/React.createElement("span", null, "🩺 Doctor Console")), /*#__PURE__*/React.createElement("button", {
+    type: "button",
     onClick: () => navigateTo(`/q/${activeDoctor?.clinicSlug || 'clinic'}`),
-    className: "flex items-center space-x-2 px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-  }, /*#__PURE__*/React.createElement("span", null, "📱 Public QR Route")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setDoctorViewTab('tv'),
-    className: `flex items-center space-x-2 px-3 py-1.5 rounded-lg transition ${doctorViewTab === 'tv' ? 'bg-teal-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`
-  }, /*#__PURE__*/React.createElement("span", null, "📺 Waiting Room TV")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setDoctorViewTab('split'),
-    className: `hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-lg transition ${doctorViewTab === 'split' ? 'bg-indigo-600 text-white shadow-md font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`
-  }, /*#__PURE__*/React.createElement("span", null, "⚡ Split View"))), /*#__PURE__*/React.createElement("div", {
-    className: "hidden md:flex items-center space-x-2 text-xs"
-  }, /*#__PURE__*/React.createElement("button", {
+    className: "flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer whitespace-nowrap",
+    title: "Open Patient Queue & Self Check-in Link"
+  }, /*#__PURE__*/React.createElement("span", null, "📱 Public QR Route"))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
     onClick: handleAudioReadyToggle,
-    className: `flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border font-bold transition cursor-pointer shadow-sm ${audioReady ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 ring-1 ring-emerald-500/30' : 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold animate-pulse'}`,
+    className: `flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border font-bold transition cursor-pointer shadow-sm whitespace-nowrap ${audioReady ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 ring-1 ring-emerald-500/30' : 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold animate-pulse'}`,
     title: "Initialize Web Speech API for phone speaker announcements"
   }, /*#__PURE__*/React.createElement("span", null, audioReady ? '🔊 Audio Ready' : '🔊 Enable Phone Audio')), /*#__PURE__*/React.createElement("button", {
     type: "button",
@@ -3547,29 +3529,33 @@ function App() {
       } catch (e) {}
       navigateTo('/login');
     },
-    className: "flex items-center space-x-1.5 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl font-bold transition cursor-pointer",
+    className: "flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl font-bold transition cursor-pointer whitespace-nowrap",
     title: "Log out of clinic dashboard"
   }, /*#__PURE__*/React.createElement("span", null, "🚪 Logout")), /*#__PURE__*/React.createElement("button", {
+    type: "button",
     onClick: () => setShowQRModal(true),
-    className: "flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-400 border border-slate-700 rounded-xl font-bold transition cursor-pointer",
+    className: "flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-400 border border-slate-700 rounded-xl font-bold transition cursor-pointer whitespace-nowrap",
     title: "View & Print unique permanent QR code for this clinic"
   }, /*#__PURE__*/React.createElement("span", null, "📱 Desk QR Code")), /*#__PURE__*/React.createElement("button", {
+    type: "button",
     onClick: () => setShowProfileModal(true),
-    className: "flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-violet-300 border border-violet-500/30 rounded-xl font-bold transition cursor-pointer",
+    className: "flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-violet-300 border border-violet-500/30 rounded-xl font-bold transition cursor-pointer whitespace-nowrap",
     title: "Edit doctor profile, qualifications, address and digital signature for Rx PDF"
   }, /*#__PURE__*/React.createElement("span", null, "⚙️ Dr. Settings")), canManageDoctors && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    type: "button",
     onClick: () => {
       setDoctorModalTab('add');
       setShowAuthModal(true);
     },
-    className: "flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 rounded-xl font-black transition cursor-pointer shadow-md shadow-emerald-500/20",
+    className: "flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 rounded-xl font-black transition cursor-pointer shadow-md shadow-emerald-500/20 whitespace-nowrap",
     title: "Add a new doctor under this clinic"
   }, /*#__PURE__*/React.createElement("span", null, "+ Add Doctor")), /*#__PURE__*/React.createElement("button", {
+    type: "button",
     onClick: () => {
       setDoctorModalTab('list');
       setShowAuthModal(true);
     },
-    className: "flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-bold transition cursor-pointer shadow",
+    className: "flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-bold transition cursor-pointer shadow whitespace-nowrap",
     title: "Manage clinic doctors & consultation rooms"
   }, /*#__PURE__*/React.createElement("span", null, "👥 Manage Doctors (", clinicDoctors.length, ")")))), /*#__PURE__*/React.createElement("div", {
     className: "flex md:hidden items-center space-x-1.5"
