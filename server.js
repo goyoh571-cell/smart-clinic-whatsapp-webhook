@@ -31,7 +31,7 @@ app.use(express.json());
 // ENVIRONMENT CONFIGURATION & CREDENTIALS
 // ----------------------------------------------------------------------------
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || 'EABBS0XEoHBQBS5lZCoWetNjSI5kWkYKFEbvkpb2VZCNCUmk9avtgalUbyu184Wepy89iQqLGzqNwJassfwW4E8LEZBfkQSBpSQE8TQcuhSso7KCZCTQtZBbalNnDq3U6x3kOlRYlveCb8XYlzTNV5dFgp1UhT4cx9ZCsYTNkRZCiBED8NDefGcEGIA3FmQDuo9mUVt7HYnfI79MpLr0jnJ3kbi21osdMOGBA6g6GA8n9NZCrz4FqRymuXZAKHu5FfLEZBf3b2WuwZB281k2ABnLLkxS';
-const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '1378688712001380';
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '1468863129640416';
 const WHATSAPP_TEST_NUMBER = process.env.WHATSAPP_TEST_NUMBER || '+1 (555) 145-6531';
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN || 'GOYOH_HEALTH_CONNECT_VERIFY_TOKEN';
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || 'AIzaSyD_0K24tUnG1OWh74HwJfjqQIZ6Q3_IOn0';
@@ -565,21 +565,46 @@ app.post(['/notifications/queue-checkin', '/api/notifications/queue-checkin'], a
     const {
       phone,
       patientName,
+      name,
       tokenNumber,
+      token,
       clinicName,
+      clinicSlug,
       doctorName,
       roomNumber,
       estimatedWaitMinutes,
+      estWaitTime,
       waitingCount,
       trackerUrl
     } = req.body;
 
-    const targetPhone = phone || WHATSAPP_TEST_NUMBER;
-    const msg = `🏥 *${clinicName || 'GOYOH Health Connect'}*\n\nNamaste *${patientName || 'Patient'}*, your digital queue token is confirmed!\n\n🎫 *Your Token:* ${tokenNumber || '#1'}\n🩺 *Doctor:* ${doctorName || 'Lead Physician'}\n📍 *Room:* ${roomNumber || 'Consultation Room 1'}\n⏱️ *Est. Wait Time:* ~${estimatedWaitMinutes || 10} mins (${waitingCount || 0} patient(s) ahead)\n\n🔴 *Track Your Live Queue Status:* \n${trackerUrl || 'https://admin.goyoh.in'}\n\n_Please arrive near your consultation room when your token is called._`;
+    const targetPhone = phone || req.body.mobileNumber || WHATSAPP_TEST_NUMBER;
+    const pName = String(patientName || name || 'Patient').trim();
+    const tNum = String(tokenNumber || token || '#1').trim();
+    const cName = String(clinicName || (clinicSlug ? clinicSlug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Clinic')).trim();
+    const dName = String(doctorName || 'Doctor').trim();
+    const rNum = String(roomNumber || 'Consultation Room 1').trim();
+    const wTime = String(estimatedWaitMinutes ? `${estimatedWaitMinutes} mins` : (estWaitTime || '10 mins')).replace(/^~+/, '').trim();
+    const qAhead = String(waitingCount ?? 0);
+    const qUrl = trackerUrl || 'https://admin.goyoh.in';
+
+    const fallbackMsg = `🏥 *${cName}*\n\nNamaste *${pName}*, your digital queue token is confirmed!\n\n🎫 *Your Token:* ${tNum}\n🩺 *Doctor:* ${dName}\n📍 *Room:* ${rNum}\n⏱️ *Est. Wait Time:* ~${wTime} (${qAhead} patient(s) ahead)\n\n🔴 *Track Your Live Queue Status:* \n${qUrl}\n\n_Please arrive near your consultation room when your token is called._`;
 
     const result = await sendMetaWhatsAppMessage({
       to: targetPhone,
-      messageText: msg
+      messageText: fallbackMsg,
+      templateName: 'detailed_token_alert',
+      languageCode: 'en',
+      parameters: [
+        cName,
+        pName,
+        tNum,
+        dName,
+        rNum,
+        wTime,
+        qAhead,
+        qUrl
+      ]
     });
 
     res.json({

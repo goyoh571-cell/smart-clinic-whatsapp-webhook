@@ -2590,6 +2590,7 @@ function App() {
     const trackerUrl = `${effectiveBase}/queue/${targetSlug}?token=${tokenCount}`;
 
     // 1. Dispatch POST request to Render backend endpoint (/api/send-token-alert)
+    const readableClinicName = targetDoc.clinicName || targetSlug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const tokenAlertPayload = {
       clinicSlug: targetSlug,
       name: cleanName,
@@ -2598,20 +2599,20 @@ function App() {
       estWaitTime: `~${estimatedWaitMinutes} mins`,
       estimatedWaitMinutes,
       waitingCount,
-      clinicName: targetDoc.clinicName,
-      doctorName: targetDoc.doctorName,
-      roomNumber: targetDoc.roomNumber,
+      clinicName: readableClinicName,
+      doctorName: targetDoc.doctorName || 'Doctor',
+      roomNumber: targetDoc.roomNumber || 'Consultation Room 1',
       trackerUrl,
-      templateName: 'patient_token_alert',
+      templateName: 'detailed_token_alert',
       languageCode: 'en',
-      parameters: [cleanName, tokenNumber, `~${estimatedWaitMinutes} mins`]
+      parameters: [readableClinicName, cleanName, tokenNumber, targetDoc.doctorName || 'Doctor', targetDoc.roomNumber || 'Consultation Room 1', `${estimatedWaitMinutes} mins`, String(waitingCount), trackerUrl]
     };
 
     // 1. Dispatch POST request directly to the full Render backend endpoint (24/7 Webhook)
     const RENDER_BACKEND_URL = 'https://smart-clinic-whatsapp-webhook.onrender.com';
     const RENDER_ENDPOINT = `${RENDER_BACKEND_URL}/api/send-token-alert`;
 
-    // A. Primary dispatch to full Render URL: /api/send-token-alert
+    // Primary dispatch to full Render URL: /api/send-token-alert
     fetch(RENDER_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -2624,18 +2625,7 @@ function App() {
       console.warn('[Render /api/send-token-alert] Notice:', err);
     });
 
-    // B. Dual-dispatch directly to full Render URL: /api/notifications/queue-checkin
-    fetch(`${RENDER_BACKEND_URL}/api/notifications/queue-checkin`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(tokenAlertPayload)
-    }).then(r => r.json()).then(res => {
-      console.log('[Render /api/notifications/queue-checkin] Dispatched:', res);
-    }).catch(() => {});
-
-    // C. Also ping local server if running locally on localhost
+    // Also ping local server if running locally on localhost
     if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
       fetch(`${serverUrl}/api/send-token-alert`, {
         method: 'POST',

@@ -1084,7 +1084,7 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
                     pass
             threading.Thread(target=_fwd_render, daemon=True).start()
 
-            t_name = data.get('templateName', 'patient_token_alert')
+            t_name = data.get('templateName', 'detailed_token_alert')
             params = data.get('parameters', [p_name, t_num, c_name, wait_time.lstrip('~'), d_name])
 
             sys.stdout.write(f"[Token Alert] DISPATCH SUCCESS -> Clinic: {c_slug} | Patient: {p_name} | To: {clean_digits} | Token: {t_num} | Template: {t_name}\n")
