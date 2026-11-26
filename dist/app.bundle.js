@@ -4540,26 +4540,102 @@ function DoctorDashboardView({
     setPackToast(`Prescription pack "${packEntry.name}" saved to Dr. ${doctor.doctorName}'s profile!`);
     setTimeout(() => setPackToast(''), 3500);
   };
+
+  // State for Age & Gender in active consultation card
+  const [activeAge, setActiveAge] = useState('');
+  const [activeGender, setActiveGender] = useState('');
+
+  // Auto-populate Age & Gender when active consultation changes or on repeat visits by phone
+  useEffect(() => {
+    if (!inConsultation) {
+      setActiveAge('');
+      setActiveGender('');
+      return;
+    }
+    const p = inConsultation.patient || {};
+    let initialAge = p.age !== undefined && p.age !== null && String(p.age).trim() !== '' && String(p.age).trim() !== '—' ? String(p.age).trim() : inConsultation.patientAge || inConsultation.age || '';
+    let initialGender = p.gender !== undefined && p.gender !== null && String(p.gender).trim() !== '' && String(p.gender).trim() !== '—' ? String(p.gender).trim() : inConsultation.patientGender || inConsultation.gender || '';
+
+    // Auto-lookup by phone for repeat patient if not already set
+    const pPhone = p.phone || inConsultation.phone || '';
+    if ((!initialAge || !initialGender) && pPhone) {
+      const past = lookupPatientByPhone(pPhone, liveQueue);
+      if (past) {
+        if (!initialAge && past.age) initialAge = past.age;
+        if (!initialGender && past.gender) initialGender = past.gender;
+      }
+    }
+    if (initialAge) {
+      const numericAge = String(initialAge).replace(/[^0-9]/g, '');
+      setActiveAge(numericAge || String(initialAge).trim());
+    } else {
+      setActiveAge('');
+    }
+    if (initialGender) {
+      const gNorm = String(initialGender).trim();
+      setActiveGender(gNorm.charAt(0).toUpperCase() + gNorm.slice(1).toLowerCase());
+    } else {
+      setActiveGender('');
+    }
+  }, [inConsultation?.id, inConsultation?.patient?.phone]);
+  const handleAgeChange = val => {
+    const cleanVal = val.replace(/[^0-9]/g, '').slice(0, 3);
+    setActiveAge(cleanVal);
+    if (inConsultation) {
+      if (!inConsultation.patient) inConsultation.patient = {};
+      inConsultation.patient.age = cleanVal;
+      inConsultation.patientAge = cleanVal;
+      const pPhone = inConsultation.patient?.phone || inConsultation.phone;
+      if (pPhone) {
+        savePatientToDirectory(pPhone, {
+          name: inConsultation.patient?.name,
+          age: cleanVal,
+          gender: activeGender
+        });
+      }
+      const currentSlug = effectiveSlug || canonicalSlug(doctor?.clinicSlug) || doctor?.clinicSlug;
+      if (currentSlug) {
+        updatePatientInFirestore(inConsultation.id, {
+          patientAge: cleanVal,
+          'patient.age': cleanVal
+        }, currentSlug);
+      }
+    }
+  };
+  const handleGenderChange = val => {
+    const cleanVal = (val || '').trim();
+    setActiveGender(cleanVal);
+    if (inConsultation) {
+      if (!inConsultation.patient) inConsultation.patient = {};
+      inConsultation.patient.gender = cleanVal;
+      inConsultation.patientGender = cleanVal;
+      const pPhone = inConsultation.patient?.phone || inConsultation.phone;
+      if (pPhone) {
+        savePatientToDirectory(pPhone, {
+          name: inConsultation.patient?.name,
+          age: activeAge,
+          gender: cleanVal
+        });
+      }
+      const currentSlug = effectiveSlug || canonicalSlug(doctor?.clinicSlug) || doctor?.clinicSlug;
+      if (currentSlug) {
+        updatePatientInFirestore(inConsultation.id, {
+          patientGender: cleanVal,
+          'patient.gender': cleanVal
+        }, currentSlug);
+      }
+    }
+  };
   const completeConsultationHandler = onCompleteConsultation || onCompleteAndPrint;
   const handleUnifiedCompleteConsultation = () => {
     if (!inConsultation) return;
     const currentRx = customRx || 'Consultation Completed';
     const currentTpl = selectedTemplate || 'Standard Prescription';
-
-    // Auto-resolve age and gender from active record or repeat visit directory
-    let pAge = inConsultation.patient?.age || inConsultation.patientAge || inConsultation.age || '';
-    let pGender = inConsultation.patient?.gender || inConsultation.patientGender || inConsultation.gender || '';
-    const pPhone = inConsultation.patient?.phone || inConsultation.phone || '';
-    if ((!pAge || !pGender) && pPhone) {
-      const past = lookupPatientByPhone(pPhone, liveQueue);
-      if (past) {
-        if (!pAge && past.age) pAge = past.age;
-        if (!pGender && past.gender) pGender = past.gender;
-      }
-    }
+    const finalAge = activeAge !== undefined && activeAge !== null && String(activeAge).trim() !== '' && String(activeAge).trim() !== '—' ? String(activeAge).trim() : inConsultation.patient?.age || inConsultation.patientAge || inConsultation.age || '';
+    const finalGender = activeGender !== undefined && activeGender !== null && String(activeGender).trim() !== '' && String(activeGender).trim() !== '—' ? String(activeGender).trim() : inConsultation.patient?.gender || inConsultation.patientGender || inConsultation.gender || '';
     completeConsultationHandler(inConsultation.id, currentRx, currentTpl, {
-      age: pAge,
-      gender: pGender
+      age: finalAge,
+      gender: finalGender
     });
 
     // Preload starter pack for next incoming patient
@@ -4708,16 +4784,54 @@ function DoctorDashboardView({
   }, /*#__PURE__*/React.createElement("span", {
     className: "w-2 h-2 rounded-full bg-slate-950 animate-pulse"
   }), /*#__PURE__*/React.createElement("span", null, "ACTIVE IN ", (doctor?.roomNumber || "Consultation Room").toUpperCase())), /*#__PURE__*/React.createElement("div", {
-    className: "flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5"
+    className: "flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-800 pb-4 sm:pb-5"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center space-x-3"
+    className: "flex items-center space-x-3 min-w-0"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "text-3xl sm:text-4xl font-black text-teal-400 font-mono-numbers whitespace-nowrap"
-  }, formatTokenNumber(inConsultation.tokenNumber)), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
-    className: "text-2xl font-bold text-white"
-  }, inConsultation.patient?.name), /*#__PURE__*/React.createElement("p", {
-    className: "text-sm text-slate-400"
-  }, inConsultation.patient?.phone)))), getPatientComplaint(inConsultation) ? /*#__PURE__*/React.createElement("div", {
+    className: "text-3xl sm:text-4xl font-black text-teal-400 font-mono-numbers whitespace-nowrap flex-shrink-0"
+  }, formatTokenNumber(inConsultation.tokenNumber)), /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap items-center gap-2"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "text-xl sm:text-2xl font-bold text-white truncate"
+  }, inConsultation.patient?.name), formatAgeGender(activeAge, activeGender) !== '—' && /*#__PURE__*/React.createElement("span", {
+    className: "text-xs px-2.5 py-0.5 rounded-full bg-teal-500/15 border border-teal-500/30 text-teal-300 font-bold font-mono"
+  }, formatAgeGender(activeAge, activeGender))), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs sm:text-sm text-slate-400 mt-0.5"
+  }, inConsultation.patient?.phone || 'No phone'))), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap items-center gap-2 sm:gap-3 bg-slate-950/80 border border-slate-800 rounded-2xl p-2 sm:px-3 shadow-inner"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center space-x-1.5"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "text-[11px] font-bold text-slate-400 uppercase tracking-wider"
+  }, "Age:"), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    inputMode: "numeric",
+    value: activeAge,
+    onChange: e => handleAgeChange(e.target.value),
+    placeholder: "Age",
+    maxLength: 3,
+    className: "w-14 px-2 py-1 bg-slate-900 border border-slate-700 focus:border-teal-400 rounded-lg text-sm font-bold text-white text-center focus:outline-none transition shadow-sm"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "text-[11px] font-semibold text-slate-400 ml-1"
+  }, "Yrs"))), /*#__PURE__*/React.createElement("div", {
+    className: "h-4 w-px bg-slate-800 hidden sm:block"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center space-x-1"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1"
+  }, "Gender:"), ['Male', 'Female', 'Other'].map(g => {
+    const isSelected = (activeGender || '').toLowerCase() === g.toLowerCase();
+    return /*#__PURE__*/React.createElement("button", {
+      key: g,
+      type: "button",
+      onClick: () => handleGenderChange(isSelected ? '' : g),
+      className: `px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${isSelected ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm shadow-teal-500/20' : 'bg-slate-900 text-slate-400 border-slate-700/80 hover:text-white hover:border-slate-600'}`
+    }, g);
+  })))), getPatientComplaint(inConsultation) ? /*#__PURE__*/React.createElement("div", {
     className: "mt-4 p-3.5 bg-slate-950/60 rounded-xl border border-slate-800/80"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-xs font-semibold text-slate-400 uppercase tracking-wide"

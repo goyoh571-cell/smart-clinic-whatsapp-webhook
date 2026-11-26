@@ -67,7 +67,7 @@ except:
     pass
 
 print("3. Updating cache buster version in index.html...")
-VERSION = "20261126_3col_rx_v2"
+VERSION = "20261126_age_gender_selection_v3"
 with open(os.path.join(BASE_DIR, "index.html"), 'r', encoding='utf-8') as f:
     idx_content = f.read()
 
