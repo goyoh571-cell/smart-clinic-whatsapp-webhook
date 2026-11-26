@@ -221,18 +221,146 @@
       return s.startsWith('#') ? s : `#${s}`;
     }
 
+    // Helper: Consistent Age and Gender Formatter (e.g., "26 Yrs / Male", or "—" if blank)
+    function formatAgeGender(rawAge, rawGender) {
+      const cleanAge = (rawAge !== null && rawAge !== undefined && String(rawAge).trim() !== '' && String(rawAge).trim() !== '—')
+        ? String(rawAge).trim()
+        : '';
+      const cleanGender = (rawGender !== null && rawGender !== undefined && String(rawGender).trim() !== '' && String(rawGender).trim() !== '—')
+        ? String(rawGender).trim()
+        : '';
+
+      let agePart = '';
+      if (cleanAge) {
+        if (/yrs?|years?/i.test(cleanAge)) {
+          agePart = cleanAge;
+        } else {
+          agePart = `${cleanAge} Yrs`;
+        }
+      }
+
+      let genderPart = '';
+      if (cleanGender) {
+        genderPart = cleanGender.charAt(0).toUpperCase() + cleanGender.slice(1).toLowerCase();
+      }
+
+      if (agePart && genderPart) {
+        return `${agePart} / ${genderPart}`;
+      }
+      if (agePart) {
+        return agePart;
+      }
+      if (genderPart) {
+        return genderPart;
+      }
+      return '—';
+    }
+
+    // Helper: Persistent Patient Directory for repeat visits by phone number
+    function lookupPatientByPhone(phone, queueList = []) {
+      if (!phone) return null;
+      const clean = String(phone).replace(/[^0-9]/g, '');
+      if (clean.length < 5) return null;
+
+      // 1. Look up in persistent patient directory
+      try {
+        const rawDir = localStorage.getItem('smart_clinic_patient_directory');
+        if (rawDir) {
+          const dir = JSON.parse(rawDir);
+          if (dir && dir[clean]) {
+            return dir[clean];
+          }
+        }
+      } catch (e) {}
+
+      // 2. Look up across active/completed queue tokens in memory
+      if (Array.isArray(queueList)) {
+        for (const t of queueList) {
+          const tPhone = String(t.patient?.phone || t.phone || '').replace(/[^0-9]/g, '');
+          if (tPhone === clean) {
+            const p = t.patient || {};
+            const age = p.age || t.patientAge;
+            const gender = p.gender || t.patientGender;
+            if (age || gender) {
+              return {
+                name: p.name || t.patientName || '',
+                age: age ? String(age).trim() : '',
+                gender: gender ? String(gender).trim() : '',
+                phone: clean
+              };
+            }
+          }
+        }
+      }
+
+      // 3. Search across all clinic tenant queues in localStorage
+      try {
+        const rawQueues = localStorage.getItem('smart_clinic_tenant_queues');
+        if (rawQueues) {
+          const tenantMap = JSON.parse(rawQueues);
+          for (const slug in tenantMap) {
+            const q = tenantMap[slug];
+            if (Array.isArray(q)) {
+              for (const t of q) {
+                const tPhone = String(t.patient?.phone || t.phone || '').replace(/[^0-9]/g, '');
+                if (tPhone === clean) {
+                  const p = t.patient || {};
+                  const age = p.age || t.patientAge;
+                  const gender = p.gender || t.patientGender;
+                  if (age || gender) {
+                    return {
+                      name: p.name || t.patientName || '',
+                      age: age ? String(age).trim() : '',
+                      gender: gender ? String(gender).trim() : '',
+                      phone: clean
+                    };
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {}
+
+      return null;
+    }
+
+    function savePatientToDirectory(phone, data = {}) {
+      if (!phone) return;
+      const clean = String(phone).replace(/[^0-9]/g, '');
+      if (clean.length < 5) return;
+      try {
+        const rawDir = localStorage.getItem('smart_clinic_patient_directory');
+        const dir = rawDir ? JSON.parse(rawDir) : {};
+        const prev = dir[clean] || {};
+        dir[clean] = {
+          ...prev,
+          ...data,
+          phone: clean,
+          age: data.age !== undefined && data.age !== null && data.age !== '' ? String(data.age).trim() : (prev.age || ''),
+          gender: data.gender !== undefined && data.gender !== null && data.gender !== '' ? String(data.gender).trim() : (prev.gender || ''),
+          name: data.name || prev.name || '',
+          updatedAt: new Date().toISOString()
+        };
+        localStorage.setItem('smart_clinic_patient_directory', JSON.stringify(dir));
+      } catch (e) {}
+    }
+
     const audioService = new AudioAnnouncementEngine();
 
     function getPatientBadgeText(patient) {
       if (!patient) return null;
       const parts = [];
       const gender = (patient.gender || '').trim();
-      if (gender && gender !== 'Other' && gender !== 'Adult') {
-        parts.push(gender);
+      if (gender && gender !== '—') {
+        parts.push(gender.charAt(0).toUpperCase() + gender.slice(1).toLowerCase());
       }
       const rawAge = patient.age;
-      if (rawAge !== null && rawAge !== undefined && rawAge !== '' && rawAge !== 30 && String(rawAge) !== '30' && String(rawAge) !== '30y') {
-        parts.push(`${rawAge}y`);
+      if (rawAge !== null && rawAge !== undefined && String(rawAge).trim() !== '' && String(rawAge).trim() !== '—') {
+        const cleanAge = String(rawAge).replace(/[^0-9]/g, '');
+        if (cleanAge) {
+          parts.push(`${cleanAge}y`);
+        }
       }
       return parts.length > 0 ? parts.join(' • ') : null;
     }
@@ -315,15 +443,34 @@
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(10);
         doc.setTextColor(15, 23, 42);
-        doc.text(`Patient: ${patient.name || 'Patient'}`, 18, 50);
-        doc.text(`Token: ${tokenNumber}`, 170, 50, { align: 'right' });
+        const pNameStr = `Patient: ${patient.name || 'Patient'}`;
+        doc.text(pNameStr, 18, 50);
+
+        // Always render Age and Gender field directly next to Patient: [Name]
+        const pNameWidth = doc.getTextWidth(pNameStr);
+        const ageGenderX = Math.max(90, 18 + pNameWidth + 8);
+        const ageGenderText = formatAgeGender(patient.age, patient.gender);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9.5);
+        doc.setTextColor(15, 23, 42);
+        doc.text('Age / Gender: ', ageGenderX, 50);
+
+        const ageGenderLabelWidth = doc.getTextWidth('Age / Gender: ');
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(51, 65, 85);
+        doc.text(ageGenderText, ageGenderX + ageGenderLabelWidth, 50);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(15, 23, 42);
+        doc.text(`Token: ${tokenNumber}`, 190, 50, { align: 'right' });
 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.setTextColor(51, 65, 85);
-        const pBadge = getPatientBadgeText(patient);
-        doc.text(`Phone: ${patient.phone || 'N/A'}${pBadge ? `   |   ${pBadge}` : ''}`, 18, 57);
-        doc.text(`Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`, 170, 57, { align: 'right' });
+        doc.text(`Phone: ${patient.phone || 'N/A'}`, 18, 57);
+        doc.text(`Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`, 190, 57, { align: 'right' });
 
         const pComplaint = getPatientComplaint(patient);
         if (pComplaint) {
@@ -981,8 +1128,8 @@
         const patientMeta = {
           name: token.patient?.name || token.name || 'Patient',
           phone: token.patient?.phone || token.phone || '',
-          age: token.patient?.age || token.age,
-          gender: token.patient?.gender || token.gender,
+          age: token.patient?.age || token.patientAge || token.age,
+          gender: token.patient?.gender || token.patientGender || token.gender,
           complaint: token.complaint || token.patient?.complaint
         };
         const result = generatePrescriptionPdf({
@@ -2643,6 +2790,12 @@
         const tokenNumber = `#${tokenCount}`;
 
         const cleanComplaint = (complaint && !['General Consultation', 'General Checkup', 'OPD Consultation'].includes(complaint.trim())) ? complaint.trim() : '';
+        
+        // Auto-populate Age & Gender from repeat visits by phone number
+        const pastRecord = lookupPatientByPhone(cleanPhone, targetQ);
+        const autoAge = pastRecord?.age || null;
+        const autoGender = pastRecord?.gender || null;
+
         const newToken = {
           id: Date.now(),
           tokenNumber,
@@ -2654,10 +2807,12 @@
           patient: {
             id: Date.now() + 1,
             name: name.trim(),
-            phone: phone.trim(),
-            age: null,
-            gender: null
+            phone: cleanPhone,
+            age: autoAge,
+            gender: autoGender
           },
+          patientAge: autoAge,
+          patientGender: autoGender,
           createdAt: new Date().toISOString()
         };
 
@@ -2747,7 +2902,7 @@
 
       // UNIFIED "COMPLETE CONSULTATION" ACTION
       // In 1 click: saves prescription, marks token as completed, dispatches WhatsApp Rx, and moves next token into consultation room
-      const handleCompleteConsultation = (tokenId, rxNotes, templateName) => {
+      const handleCompleteConsultation = (tokenId, rxNotes, templateName, patientMeta = {}) => {
         if (!activeToken) return;
 
         const now = Date.now();
@@ -2755,15 +2910,36 @@
         const doctorSlug = canonicalSlug(rawDoctorSlug) || rawDoctorSlug;
         const currentQ = getQueueForSlug(clinicQueues, doctorSlug);
 
+        // Resolve clean Age and Gender from patientMeta or activeToken
+        const patientPhone = activeToken.patient?.phone || activeToken.phone || '';
+        const cleanPatientPhone = String(patientPhone).replace(/[^0-9]/g, '');
+
+        const finalAge = (patientMeta && patientMeta.age !== undefined && patientMeta.age !== null && String(patientMeta.age).trim() !== '' && String(patientMeta.age).trim() !== '—')
+          ? String(patientMeta.age).trim()
+          : (activeToken.patient?.age || activeToken.patientAge || activeToken.age || '');
+
+        const finalGender = (patientMeta && patientMeta.gender !== undefined && patientMeta.gender !== null && String(patientMeta.gender).trim() !== '' && String(patientMeta.gender).trim() !== '—')
+          ? String(patientMeta.gender).trim()
+          : (activeToken.patient?.gender || activeToken.patientGender || activeToken.gender || '');
+
+        // Persist patient record to directory for repeat visits
+        if (cleanPatientPhone) {
+          savePatientToDirectory(cleanPatientPhone, {
+            name: activeToken.patient?.name || activeToken.patientName || '',
+            age: finalAge,
+            gender: finalGender
+          });
+        }
+
         // 1. Generate digital prescription PDF via jsPDF
         const pdfResult = generatePrescriptionPdf({
           doctor: activeDoctor,
           patient: {
             name: activeToken.patient?.name,
             phone: activeToken.patient?.phone,
-            age: activeToken.patient?.age,
-            gender: activeToken.patient?.gender,
-            complaint: activeToken.complaint
+            age: finalAge,
+            gender: finalGender,
+            complaint: activeToken.complaint || activeToken.patient?.complaint
           },
           tokenNumber: activeToken.tokenNumber,
           rxNotes: rxNotes || 'Standard medical follow-up.',
@@ -2798,7 +2974,14 @@
               rxPdfUrl: pdfUrl,
               rxFilename: filename,
               durationMinutes: durationMins,
-              consultationEndTime: now
+              consultationEndTime: now,
+              patientAge: finalAge,
+              patientGender: finalGender,
+              patient: {
+                ...(t.patient || {}),
+                age: finalAge,
+                gender: finalGender
+              }
             };
           }
           if (nextPatient && t.id === nextPatient.id) {
@@ -2830,7 +3013,11 @@
             if (storageRes && storageRes.downloadUrl) {
               updatePatientInFirestore(tokenId, {
                 rxPdfUrl: storageRes.downloadUrl,
-                rxStoragePath: storageRes.storagePath
+                rxStoragePath: storageRes.storagePath,
+                patientAge: finalAge,
+                patientGender: finalGender,
+                'patient.age': finalAge,
+                'patient.gender': finalGender
               }, doctorSlug);
             }
           }).catch(e => console.warn('[Storage Upload Warning]:', e));
@@ -2843,7 +3030,11 @@
           rxPdfUrl: pdfUrl,
           rxFilename: filename,
           durationMinutes: durationMins,
-          consultationEndTime: now
+          consultationEndTime: now,
+          patientAge: finalAge,
+          patientGender: finalGender,
+          'patient.age': finalAge,
+          'patient.gender': finalGender
         }, doctorSlug);
 
         if (nextPatient) {
@@ -2899,6 +3090,8 @@
         setLastCompletedRx({
           patientName: activeToken.patient?.name,
           phone: activeToken.patient?.phone,
+          patientAge: finalAge,
+          patientGender: finalGender,
           tokenNumber: activeToken.tokenNumber,
           pdfUrl,
           filename,
@@ -2980,9 +3173,15 @@
 
       // Open Prescription Preview Modal (No automatic download on view!)
       const handleOpenRxPreview = (token) => {
+        const resolvedAge = token.patient?.age || token.patientAge || token.age || '';
+        const resolvedGender = token.patient?.gender || token.patientGender || token.gender || '';
         const res = generatePrescriptionPdf({
           doctor: activeDoctor,
-          patient: token.patient || {},
+          patient: {
+            ...(token.patient || {}),
+            age: resolvedAge,
+            gender: resolvedGender
+          },
           tokenNumber: token.tokenNumber,
           rxNotes: token.rxNotes,
           templateName: token.templateName,
@@ -2990,6 +3189,13 @@
 
         setViewingRxModalToken({
           ...token,
+          patientAge: resolvedAge,
+          patientGender: resolvedGender,
+          patient: {
+            ...(token.patient || {}),
+            age: resolvedAge,
+            gender: resolvedGender
+          },
           pdfBlobUrl: res ? res.blobUrl : null,
           pdfDoc: res ? res.doc : null,
           filename: res ? res.filename : `Rx_${(token.patient?.name || 'Patient').replace(/\s+/g, '')}_${token.tokenNumber}.pdf`,
@@ -3832,6 +4038,10 @@
                     <span className="text-white font-bold">{lastCompletedRx.patientName}</span>
                   </div>
                   <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-semibold">Age / Gender:</span>
+                    <span className="text-teal-400 font-bold">{formatAgeGender(lastCompletedRx.patientAge, lastCompletedRx.patientGender)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
                     <span className="text-slate-400 font-semibold">Token:</span>
                     <span className="text-teal-400 font-bold">{formatTokenNumber(lastCompletedRx.tokenNumber)}</span>
                   </div>
@@ -3911,7 +4121,7 @@
                         </span>
                       </div>
                       <p className="text-xs text-slate-400">
-                        {viewingRxModalToken.patient?.name} &bull; {viewingRxModalToken.patient?.phone || 'No phone'} &bull; {new Date(viewingRxModalToken.consultationEndTime || viewingRxModalToken.createdAt || Date.now()).toLocaleDateString()}
+                        {viewingRxModalToken.patient?.name} &bull; Age / Gender: {formatAgeGender(viewingRxModalToken.patient?.age || viewingRxModalToken.patientAge, viewingRxModalToken.patient?.gender || viewingRxModalToken.patientGender)} &bull; {viewingRxModalToken.patient?.phone || 'No phone'} &bull; {new Date(viewingRxModalToken.consultationEndTime || viewingRxModalToken.createdAt || Date.now()).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
@@ -4690,13 +4900,110 @@
         setTimeout(() => setPackToast(''), 3500);
       };
 
+      // State for Age & Gender in active consultation card
+      const [activeAge, setActiveAge] = useState('');
+      const [activeGender, setActiveGender] = useState('');
+
+      // Auto-populate Age & Gender when active consultation changes or on repeat visits by phone
+      useEffect(() => {
+        if (!inConsultation) {
+          setActiveAge('');
+          setActiveGender('');
+          return;
+        }
+        const p = inConsultation.patient || {};
+        let initialAge = (p.age !== undefined && p.age !== null && String(p.age).trim() !== '' && String(p.age).trim() !== '—')
+          ? String(p.age).trim()
+          : (inConsultation.patientAge || inConsultation.age || '');
+        let initialGender = (p.gender !== undefined && p.gender !== null && String(p.gender).trim() !== '' && String(p.gender).trim() !== '—')
+          ? String(p.gender).trim()
+          : (inConsultation.patientGender || inConsultation.gender || '');
+
+        // Auto-lookup by phone for repeat patient if not already set
+        const pPhone = p.phone || inConsultation.phone || '';
+        if ((!initialAge || !initialGender) && pPhone) {
+          const past = lookupPatientByPhone(pPhone, liveQueue);
+          if (past) {
+            if (!initialAge && past.age) initialAge = past.age;
+            if (!initialGender && past.gender) initialGender = past.gender;
+          }
+        }
+
+        if (initialAge) {
+          const numericAge = String(initialAge).replace(/[^0-9]/g, '');
+          setActiveAge(numericAge || String(initialAge).trim());
+        } else {
+          setActiveAge('');
+        }
+
+        if (initialGender) {
+          const gNorm = String(initialGender).trim();
+          setActiveGender(gNorm.charAt(0).toUpperCase() + gNorm.slice(1).toLowerCase());
+        } else {
+          setActiveGender('');
+        }
+      }, [inConsultation?.id, inConsultation?.patient?.phone]);
+
+      const handleAgeChange = (val) => {
+        const cleanVal = val.replace(/[^0-9]/g, '').slice(0, 3);
+        setActiveAge(cleanVal);
+        if (inConsultation) {
+          if (!inConsultation.patient) inConsultation.patient = {};
+          inConsultation.patient.age = cleanVal;
+          inConsultation.patientAge = cleanVal;
+          const pPhone = inConsultation.patient?.phone || inConsultation.phone;
+          if (pPhone) {
+            savePatientToDirectory(pPhone, {
+              name: inConsultation.patient?.name,
+              age: cleanVal,
+              gender: activeGender
+            });
+          }
+          const currentSlug = effectiveSlug || canonicalSlug(doctor?.clinicSlug) || doctor?.clinicSlug;
+          if (currentSlug) {
+            updatePatientInFirestore(inConsultation.id, {
+              patientAge: cleanVal,
+              'patient.age': cleanVal
+            }, currentSlug);
+          }
+        }
+      };
+
+      const handleGenderChange = (val) => {
+        const cleanVal = (val || '').trim();
+        setActiveGender(cleanVal);
+        if (inConsultation) {
+          if (!inConsultation.patient) inConsultation.patient = {};
+          inConsultation.patient.gender = cleanVal;
+          inConsultation.patientGender = cleanVal;
+          const pPhone = inConsultation.patient?.phone || inConsultation.phone;
+          if (pPhone) {
+            savePatientToDirectory(pPhone, {
+              name: inConsultation.patient?.name,
+              age: activeAge,
+              gender: cleanVal
+            });
+          }
+          const currentSlug = effectiveSlug || canonicalSlug(doctor?.clinicSlug) || doctor?.clinicSlug;
+          if (currentSlug) {
+            updatePatientInFirestore(inConsultation.id, {
+              patientGender: cleanVal,
+              'patient.gender': cleanVal
+            }, currentSlug);
+          }
+        }
+      };
+
       const completeConsultationHandler = onCompleteConsultation || onCompleteAndPrint;
 
       const handleUnifiedCompleteConsultation = () => {
         if (!inConsultation) return;
         const currentRx = customRx || 'Consultation Completed';
         const currentTpl = selectedTemplate || 'Standard Prescription';
-        completeConsultationHandler(inConsultation.id, currentRx, currentTpl);
+        completeConsultationHandler(inConsultation.id, currentRx, currentTpl, {
+          age: activeAge,
+          gender: activeGender
+        });
 
         // Preload starter pack for next incoming patient
         if (doctorPacks && doctorPacks.length > 0) {
@@ -4869,19 +5176,65 @@
                     <span>ACTIVE IN {(doctor?.roomNumber || "Consultation Room").toUpperCase()}</span>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
                     <div className="flex items-center space-x-3">
                       <span className="text-3xl sm:text-4xl font-black text-teal-400 font-mono-numbers whitespace-nowrap">
                         {formatTokenNumber(inConsultation.tokenNumber)}
                       </span>
                       <div>
-                        <h3 className="text-2xl font-bold text-white">{inConsultation.patient?.name}</h3>
-                        <p className="text-sm text-slate-400">
-                          {inConsultation.patient?.phone}
-                          {getPatientBadgeText(inConsultation.patient) && (
-                            <span> • {getPatientBadgeText(inConsultation.patient)}</span>
-                          )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-2xl font-bold text-white">{inConsultation.patient?.name}</h3>
+                          <span className="text-xs px-2.5 py-0.5 rounded-full bg-teal-500/15 border border-teal-500/30 text-teal-300 font-bold font-mono">
+                            Age / Gender: {formatAgeGender(activeAge, activeGender)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-400 mt-0.5">
+                          {inConsultation.patient?.phone || 'No phone'}
                         </p>
+                      </div>
+                    </div>
+
+                    {/* Interactive Age & Gender inputs for Doctor */}
+                    <div className="flex flex-wrap items-center gap-3 bg-slate-950/80 border border-slate-800/90 rounded-2xl p-2.5 sm:px-3.5">
+                      {/* Age Input */}
+                      <div className="flex items-center space-x-1.5">
+                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Age:</label>
+                        <div className="relative flex items-center">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={activeAge}
+                            onChange={(e) => handleAgeChange(e.target.value)}
+                            placeholder="Age"
+                            maxLength={3}
+                            className="w-14 px-2 py-1 bg-slate-900 border border-slate-700 focus:border-teal-400 rounded-lg text-sm font-bold text-white text-center focus:outline-none transition"
+                          />
+                          <span className="text-[11px] font-semibold text-slate-400 ml-1">Yrs</span>
+                        </div>
+                      </div>
+
+                      <div className="h-4 w-px bg-slate-800 hidden sm:block"></div>
+
+                      {/* Gender Selector Buttons */}
+                      <div className="flex items-center space-x-1">
+                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Gender:</label>
+                        {['Male', 'Female', 'Other'].map((g) => {
+                          const isSelected = (activeGender || '').toLowerCase() === g.toLowerCase();
+                          return (
+                            <button
+                              key={g}
+                              type="button"
+                              onClick={() => handleGenderChange(isSelected ? '' : g)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                                isSelected
+                                  ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm shadow-teal-500/20'
+                                  : 'bg-slate-900 text-slate-400 border-slate-700/80 hover:text-white hover:border-slate-600'
+                              }`}
+                            >
+                              {g}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
